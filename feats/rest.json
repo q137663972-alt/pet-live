@@ -1,0 +1,14 @@
+{
+  "restMinutes": 10,
+  "gapMinutes": 2,
+  "cooldownMinutes": 120,
+  "rareChance": 0.09,
+  "common": [
+    "小猫觉得你累了，你该休息一会。",
+    "主人该停止工作了，快陪我玩一会吧。"
+  ],
+  "rare": [
+    "{peer} 劝你该喝水了。",
+    "{peer} 见你工作这么久，很担心你。"
+  ]
+}
