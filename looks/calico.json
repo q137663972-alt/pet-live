@@ -1,0 +1,24 @@
+{
+  "id": "calico",
+  "kind": "builtin",
+  "name": "三花猫",
+  "builtin_coat": {
+    "id": "calico",
+    "name": "三花猫",
+    "fur": "#f8f6ef",
+    "paw": "#f8f6ef",
+    "inner": "#f2b9b0",
+    "eye": "#c79a2e",
+    "pupil": "#141310",
+    "whisker": "#b5b1a2",
+    "outline": "#b5b1a2",
+    "line": "#8a8676",
+    "sock": 0.16,
+    "pattern": "calico",
+    "patchA": "#e9973f",
+    "patchB": "#1d1c1a",
+    "muzzle": "#fbf8f0",
+    "blush": "#f2b0a8",
+    "tail": "#1d1c1a"
+  }
+}

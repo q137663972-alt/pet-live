@@ -1,0 +1,21 @@
+{
+  "id": "blue",
+  "kind": "builtin",
+  "name": "蓝猫",
+  "builtin_coat": {
+    "id": "blue",
+    "name": "蓝灰猫",
+    "fur": "#8090a0",
+    "paw": "#cdd5da",
+    "inner": "#c59aa0",
+    "eye": "#e0a63a",
+    "pupil": "#121412",
+    "whisker": "#f4f4ee",
+    "outline": "#e7ecef",
+    "line": "#3c4650",
+    "sock": 0.18,
+    "pattern": "solid",
+    "muzzle": "#cdd5da",
+    "blush": "#e3a9a4"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "cream-orange",
+  "kind": "custom",
+  "name": "奶油橘",
+  "fur": "#f0b070",
+  "patch": "#fbe8c9",
+  "accent": "#c98b52",
+  "eye": "#6b9440",
+  "eye2": "#6b9440",
+  "pattern": "tabby",
+  "spots": []
+}

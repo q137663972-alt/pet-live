@@ -1,0 +1,19 @@
+{
+  "id": "tuxedo",
+  "kind": "builtin",
+  "name": "奶牛猫",
+  "builtin_coat": {
+    "id": "tuxedo",
+    "name": "奶牛猫",
+    "fur": "#161616",
+    "paw": "#f8f5ea",
+    "inner": "#2a2521",
+    "eye": "#e7bd3a",
+    "pupil": "#0c0c0c",
+    "whisker": "#f3f0e4",
+    "outline": "#f1eee2",
+    "line": "#e7bd3a",
+    "sock": 0.12,
+    "pattern": "solid"
+  }
+}

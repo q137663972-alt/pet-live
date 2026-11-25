@@ -1,0 +1,22 @@
+{
+  "id": "tabby",
+  "kind": "builtin",
+  "name": "狸花猫",
+  "builtin_coat": {
+    "id": "tabby",
+    "name": "狸花猫",
+    "fur": "#a08a6c",
+    "paw": "#d7c6a8",
+    "inner": "#d9a79a",
+    "eye": "#8fae4a",
+    "pupil": "#14150f",
+    "whisker": "#f4f0e4",
+    "outline": "#efe8d8",
+    "line": "#3f3324",
+    "sock": 0.18,
+    "pattern": "tabby",
+    "stripe": "#4d3d2b",
+    "muzzle": "#d7c6a8",
+    "blush": "#dfa89f"
+  }
+}

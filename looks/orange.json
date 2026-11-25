@@ -1,0 +1,22 @@
+{
+  "id": "orange",
+  "kind": "builtin",
+  "name": "橘猫",
+  "builtin_coat": {
+    "id": "orange",
+    "name": "橘猫",
+    "fur": "#e9973f",
+    "paw": "#fbe8c9",
+    "inner": "#d98a86",
+    "eye": "#6b9440",
+    "pupil": "#161713",
+    "whisker": "#fffaf0",
+    "outline": "#f6e7cf",
+    "line": "#7a4312",
+    "sock": 0.2,
+    "pattern": "tabby",
+    "stripe": "#c26a1f",
+    "muzzle": "#fbe8c9",
+    "blush": "#f3a39a"
+  }
+}

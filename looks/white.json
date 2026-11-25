@@ -1,0 +1,21 @@
+{
+  "id": "white",
+  "kind": "builtin",
+  "name": "白猫",
+  "builtin_coat": {
+    "id": "white",
+    "name": "白猫",
+    "fur": "#f8f6ef",
+    "paw": "#f8f6ef",
+    "inner": "#f2b9b0",
+    "eye": "#5aa9c9",
+    "pupil": "#111310",
+    "whisker": "#b5b1a2",
+    "outline": "#b5b1a2",
+    "line": "#8a8676",
+    "sock": 0.16,
+    "pattern": "solid",
+    "muzzle": "#fffdf7",
+    "blush": "#f4b8b0"
+  }
+}
