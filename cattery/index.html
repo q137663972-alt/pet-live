@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>猫舍</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent;
+    font-family:"Microsoft YaHei","Segoe UI",sans-serif;user-select:none;}
+  #room{position:absolute;inset:0;background:#fbf3e4;border-radius:14px;overflow:hidden;}
+  #floor{position:absolute;left:0;right:0;bottom:0;height:38%;background:#efe2cb;}
+  #rug{position:absolute;left:8%;right:8%;bottom:6%;height:18%;background:#e7d2ad;border-radius:50%;}
+  #house{position:absolute;left:50%;bottom:24%;width:34%;transform:translateX(-50%);
+    filter:drop-shadow(0 6px 4px rgba(120,90,50,.18));}
+  #heart{position:absolute;left:50%;top:26%;font-size:28px;transform:translate(-50%,0) scale(0);
+    transition:transform .45s cubic-bezier(.2,1.6,.4,1);color:#e2685f;}
+  #heart.on{transform:translate(-50%,0) scale(1.15);}
+  .cat{position:absolute;bottom:10%;width:20%;height:44%;transition:transform 1.5s ease-in-out, opacity .4s;}
+  #pa{left:3%;}
+  #pb{right:3%;}
+  #pa.in{transform:translateX(105%);}
+  #pb.in{transform:translateX(-105%) scaleX(-1);}
+  #kitten{position:absolute;left:50%;bottom:18%;width:13%;height:26%;opacity:0;
+    transform:translate(-50%,10px) scale(.9);transition:opacity .5s, transform .6s cubic-bezier(.2,1.6,.4,1);}
+  #kitten.on{opacity:1;transform:translate(-50%,0) scale(1);}
+  #title{position:absolute;left:0;right:0;top:4%;text-align:center;font-size:14px;color:#6b4f2b;letter-spacing:2px;}
+  #sub{position:absolute;left:0;right:0;bottom:2.5%;text-align:center;font-size:12px;color:#8a6a41;}
+</style>
+<script src="three.min.js"></script>
+<script src="7paws.js"></script>
+</head>
+<body>
+<div id="room">
+  <div id="floor"></div>
+  <div id="rug"></div>
+  <div id="title">猫 舍</div>
+  <svg id="house" viewBox="0 0 200 170" aria-hidden="true">
+    <polygon points="100,6 186,66 14,66" fill="#c98b52"/>
+    <polygon points="100,6 186,66 100,66" fill="#b87a44"/>
+    <rect x="26" y="64" width="148" height="86" fill="#f1e3cc"/>
+    <rect x="26" y="64" width="148" height="10" fill="#e2d0b2"/>
+    <rect x="118" y="64" width="56" height="86" fill="#e6d6ba"/>
+    <rect x="68" y="104" width="44" height="46" rx="22" fill="#a9764a"/>
+    <rect x="88" y="64" width="20" height="22" fill="#d9c5a2"/>
+    <circle cx="48" cy="96" r="8" fill="#e2685f"/>
+  </svg>
+  <div id="heart">♥</div>
+  <div class="cat" id="pa"></div>
+  <div class="cat" id="pb"></div>
+  <div class="cat" id="kitten"></div>
+  <div id="sub"></div>
+</div>
+<script>
+(function () {
+  var qs = new URLSearchParams(location.search);
+  var hostA = document.getElementById('pa'),
+      hostB = document.getElementById('pb'),
+      hostK = document.getElementById('kitten'),
+      heart = document.getElementById('heart'),
+      sub = document.getElementById('sub');
+
+  function mixHex(a, b, t) {
+    var pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16), out = '#';
+    for (var s = 16; s >= 0; s -= 8) {
+      var v = Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
+      out += ('0' + v.toString(16)).slice(-2);
+    }
+    return out;
+  }
+  function lum(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+  }
+  function palette(c) {
+    var fur = c.fur, l = lum(fur), pale = l > 0.78, line = l < 0.2 ? mixHex(fur, '#b5b1a2', 0.6) : (l > 0.8 ? mixHex(fur, '#8a8676', 0.75) : mixHex(fur, '#1c1a16', 0.5));
+    var base = { pattern: c.pattern, fur: fur, patch: c.patch, line: line, eye: c.eye,
+      eye2: c.eye2 || c.eye, whisker: l > 0.7 ? '#b5b1a2' : '#f4f4ee', whiskerOut: line,
+      stripe: mixHex(fur, '#1c1a16', 0.28), inner: mixHex(fur, '#f2b9b0', pale ? 0.65 : 0.45), spots: c.spots || [] };
+    if (c.pattern === 'solid') { base.patch = fur; base.stripe = fur; }
+    if (c.pattern === 'calico') { base.patch = fur; base.patchA = c.patch; base.patchB = c.accent; base.tail = c.accent; }
+    return base;
+  }
+  function mount(host, coat) {
+    var api = window.createCat(host, { coat: 'orange', idleActions: true, sleepMinutes: 999 });
+    if (coat && coat.kind === 'custom') api.setCustomCoat(palette(coat));
+    return api;
+  }
+
+  var A = null, B = null, K = null;
+  try {
+    A = mount(hostA, null);
+    B = mount(hostB, null);
+    K = mount(hostK, null);
+  } catch (e) {}
+
+  var kittenName = qs.get('kitten') || '小猫';
+  var auto = qs.get('autoClose');
+  sub.textContent = '';
+
+  setTimeout(function () { hostA.classList.add('in'); hostB.classList.add('in'); }, 300);
+  setTimeout(function () {
+    heart.classList.add('on');
+    try { if (A) A.tap('Left'); if (B) B.tap('Right'); } catch (e) {}
+    sub.textContent = '两只猫抱在了一起…';
+  }, 2000);
+  setTimeout(function () {
+    hostK.classList.add('on');
+    heart.classList.remove('on');
+    sub.textContent = '小猫出生了：' + kittenName;
+  }, 3100);
+  if (auto) setTimeout(function () { try { window.chrome && window.chrome.webview && window.chrome.webview.postMessage({ cmd: 'closeCattery' }); } catch (e) {} }, parseInt(auto, 10) || 6000);
+})();
+</script>
+</body>
+</html>
