@@ -1,5 +1,5 @@
 {
-  "restMinutes": 12,
+  "restMinutes": 10,
   "gapMinutes": 2,
   "cooldownMinutes": 120,
   "rareChance": 0.09,
