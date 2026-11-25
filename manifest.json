@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.25.2",
+  "version": "2026.11.25.3",
   "updated": "2026-11-25",
   "looks": [
     "looks/orange.json",
@@ -14,5 +14,6 @@
   ],
   "feats": "feats/ops.json",
   "cattery": "cattery/",
-  "rest": "feats/rest.json"
+  "rest": "feats/rest.json",
+  "cats": "feats/cats.json"
 }
