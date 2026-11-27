@@ -546,7 +546,9 @@
     if (R3) {
       R3.on = false; R3.ro = false;
       R3.state = ''; R3.walkActive = false;
+      R3.turnTo = 0; R3.turnT = 1;
       const c = document.getElementById('c3d'); if (c) c.style.display = 'none';
+      clearTimeout(R3.walkEnd); clearTimeout(R3.walkWatch);
       if (R3.mixer) try { R3.mixer.stopAllAction(); } catch (e) {}
       if (R3.mixTimer) { clearTimeout(R3.mixTimer); R3.mixTimer = 0; }
       if (R3.blinkTimer) { clearTimeout(R3.blinkTimer); R3.blinkTimer = 0; }
@@ -660,8 +662,9 @@
       root: null, mesh: null, shadow: null,
       on: false, dir: 1, last: 0,
       lookX: 0, lookY: 0, headCurX: 0, headCurY: 0,
-      walkActive: false, walkEnd: 0, walkTimer: 0,
-      blinkTimer: 0, blinkNext: 0, blinkPhase: 0, blinkHold: 0,
+      walkActive: false, walkEnd: 0, walkWatch: 0, walkDur: 1500,
+      turnFrom: 0, turnTo: 0, turnT: 1, turnDur: 0.25,
+      blinkTimer: 0, blinkNext: 0, blinkPhase: 0, blinkCloseUntil: 0,
       bones: {}, eyes: [], H: 0.62, scaleK: 1,
       mixTimer: 0, coatTint: null
     };
@@ -761,6 +764,7 @@
           root.traverse(function (o) { if (o.isBone) R.bones[o.name] = o; });
           R.eyes = [R.bones['EyeL'], R.bones['EyeR']].filter(Boolean);
           if (!R.bones['Head']) throw new Error('骨骼不符：缺 Head');
+          post({ t: 'dbg', m: '3d bones eyes=[' + R.eyes.map(function (b) { return b.name; }).join(',') + '] n=' + R.eyes.length + ' head=' + (R.bones['Head'] ? 'yes' : 'no') });
 
           R.shadow = rc3Shadow(H);
           pivot.add(R.shadow);
@@ -794,9 +798,17 @@
   /* 状态机：idle/walk/sit/sleep/eat；sleep 闭眼由剪辑内置，眨眼不打断状态 */
   function rc3SetState(name) {
     const R = R3; if (!R || !R.on) return;
+    if (name !== 'walk' && R.walkActive) rc3StopWalk();
     if (R.state === name) return;
     R.state = name;
     rc3Play(name);
+  }
+
+  /* 确定性转身：记录起/终角度与进度，按时间平滑插值（smoothstep 0.25s），不用每帧 dt 连乘 */
+  function rc3TurnTo(a) {
+    const R = R3; if (!R) return;
+    R.turnFrom = R.root ? R.root.rotation.y : 0;
+    R.turnTo = a; R.turnT = 0;
   }
 
   function rc3Tick() {
@@ -808,11 +820,16 @@
     R.last = t;
     if (R.mixer) R.mixer.update(dt);
 
-    /* 朝向：站立回正 0°，走路侧身 ±90°，0.25s 插值转身，不硬翻 */
+    /* 朝向：站立回正 0°，走路侧身 ±90°；确定性 0.25s smoothstep 缓动，施加在加入 scene 的 pivot 上（不碰被 mixer 驱动的骨） */
     if (R.root) {
-      const target = R.walkActive ? (R.dir < 0 ? Math.PI / 2 : -Math.PI / 2) : 0;
-      const k = Math.min(1, dt / 0.25);
-      R.root.rotation.y += (target - R.root.rotation.y) * k;
+      if (R.turnT < R.turnDur) {
+        R.turnT += dt;
+        const k = Math.min(1, R.turnT / R.turnDur);
+        const e = k * k * (3 - 2 * k);
+        R.root.rotation.y = R.turnFrom + (R.turnTo - R.turnFrom) * e;
+      } else {
+        R.root.rotation.y = R.turnTo;
+      }
     }
 
     /* 头部跟随鼠标：Head 本地 Y ±0.5、X ±0.15，lerp 平滑（约 700ms 跟上） */
@@ -836,57 +853,68 @@
     R.r.render(R.scene, R.cam);
   }
 
-  /* 眨眼调度：随机 3~7s 一次，偶发连眨两下 */
+  /* 眨眼调度：随机 3~7s 一次，偶发连眨两下；闭眼保持 ~180ms，scale.y 下限 0.08（不压成 0） */
   function rc3BlinkSchedule() {
     const R = R3; if (!R) return;
     R.blinkNext = performance.now() + 3000 + Math.random() * 4000;
   }
-  function rc3BlinkOnce() {
+  function rc3BlinkOnce(ms) {
     const R = R3; if (!R || !R.on) return;
     if (!R.eyes.length) return;
-    R.blinkPhase = 1; R.blinkHold = 0;
+    R.blinkCloseUntil = performance.now() + (Number(ms) || 180);
+    R.blinkPhase = 1;
   }
   function rc3BlinkTick(t) {
     const R = R3; if (!R) return;
     if (!R.eyes.length) return;
     if (R.blinkPhase === 0 && t >= R.blinkNext) {
-      R.blinkPhase = 1; R.blinkHold = 0;
-      if (Math.random() < 0.3) setTimeout(rc3BlinkOnce, 420);
+      R.blinkPhase = 1;
+      R.blinkCloseUntil = t + 180;
+      if (Math.random() < 0.3) setTimeout(function () { rc3BlinkOnce(180); }, 420);
     }
     if (R.blinkPhase === 1) {
-      R.blinkHold += 1;
-      const s = 0.12;
-      R.eyes.forEach(function (b) { b.scale.y = s; });
-      if (R.blinkHold > 3) { R.blinkPhase = 2; }
-    } else if (R.blinkPhase === 2) {
-      R.eyes.forEach(function (b) { b.scale.y = 1; });
-      R.blinkPhase = 0;
-      rc3BlinkSchedule();
+      R.eyes.forEach(function (b) { b.scale.y = 0.08; });
+      if (t >= R.blinkCloseUntil) {
+        R.blinkPhase = 0;
+        R.eyes.forEach(function (b) { b.scale.y = 1; });
+        rc3BlinkSchedule();
+      }
     }
   }
 
-  /* 走路：Root Y 旋转 ±90° 侧身，0.25s 插值转身；walk 剪辑 timeScale 跟随外壳步速 */
+  /* 走路：Root Y 旋转 ±90° 侧身；ms 缺省按 1.5s 兜底；看门狗 1.4× 时长强制 stop，杜绝 walkActive 卡死 */
   function rc3Walk(dir, ms) {
     const R = R3; if (!R || !R.on) return false;
     R.dir = Number(dir) < 0 ? -1 : 1;
+    const dur = Math.max(900, Number(ms) || 1500);
+    R.walkDur = dur;
     R.walkActive = true;
     rc3SetState('walk');
+    rc3TurnTo(R.dir < 0 ? Math.PI / 2 : -Math.PI / 2);
     /* 步速匹配：外壳 2.6px/帧 @30fps ≈ 78px/s；按剪辑循环步幅估算 timeScale，避免打滑 */
     if (R.curAct) {
       try {
-        const dur = R.curAct.getClip().duration || 0.9;
-        const pace = Math.max(0.6, Math.min(1.6, dur / 0.9));
+        const clipDur = R.curAct.getClip().duration || 0.9;
+        const pace = Math.max(0.6, Math.min(1.6, clipDur / 0.9));
         R.curAct.setEffectiveTimeScale(pace);
       } catch (e) {}
     }
-    clearTimeout(R.walkEnd);
-    if (ms) R.walkEnd = setTimeout(function () { rc3WalkStop(); }, Math.max(600, Number(ms)));
+    clearTimeout(R.walkEnd); clearTimeout(R.walkWatch);
+    R.walkEnd = setTimeout(rc3WalkStop, dur);
+    R.walkWatch = setTimeout(rc3WalkStop, Math.round(dur * 1.4) + 300);
     return true;
+  }
+  /* 底层停走：清标志/定时器、回正朝向，不切状态机 */
+  function rc3StopWalk() {
+    const R = R3; if (!R) return;
+    R.walkActive = false;
+    clearTimeout(R.walkEnd); clearTimeout(R.walkWatch);
+    R.walkEnd = 0; R.walkWatch = 0;
+    rc3TurnTo(0);
   }
   function rc3WalkStop() {
     const R = R3; if (!R) return;
-    R.walkActive = false;
-    clearTimeout(R.walkEnd); R.walkEnd = 0;
+    rc3StopWalk();
     if (R.on) rc3SetState('idle');
   }
 
@@ -970,7 +998,17 @@
       if (R3 && R3.on) { rc3SetState('sleep'); return; }
       rcPoseTo('lie'); rcBox.classList.add('a-sleepy');
     },
+    sit: function () {
+      if (R3 && R3.on) { rc3SetState('sit'); return; }
+    },
     modelOff: rcOff
+  };
+
+  /* 调试入口：强制闭眼 N 毫秒（验收截帧用）；常态眨眼仍走随机 3~7s */
+  window.__blinkHold = function (ms) { rc3BlinkOnce(Number(ms) || 180); };
+  window.__blinkInfo = function () {
+    if (!R3) return { on: false };
+    return { on: R3.on, state: R3.state, cur: R3.cur, acts: Object.keys(R3.acts), eyes: R3.eyes.map(function (b) { return b.name; }), walkActive: R3.walkActive, rot: R3.root ? R3.root.rotation.y : null };
   };
 
   /* ---------- page -> host（拖动与右键交给宿主处理，页面只在点按猫头时摸一下） ---------- */
@@ -989,12 +1027,17 @@
   function onUp(e) {
     if (!dragging) return;
     dragging = false;
+    /* 拖动结束：停止走路并回正朝向 */
+    if (R3 && R3.on) rc3WalkStop();
   }
   window.addEventListener('mousedown', onDown);
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
   window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
   window.addEventListener('blur', () => { dragging = false; });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) rc3WalkStop();
+  });
 
   /* ---------- social relay over ntfy.sh (https 443, works behind CN networks) ---------- */
   let es = null, esList = [], myRoom = '', myNick = '', socialOn = false, hbTimer = 0, peerName = '';
