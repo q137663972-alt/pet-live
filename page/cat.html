@@ -669,6 +669,7 @@
       turnFrom: 0, turnTo: 0, turnT: 1, turnDur: 0.25,
       blinkTimer: 0, blinkNext: 0, blinkPhase: 0, blinkCloseUntil: 0,
       bones: {}, eyes: [], lids: [], H: 0.62, scaleK: 1,
+      skinInfo: null,
       mixTimer: 0, coatTint: null
     };
     return R3;
@@ -766,9 +767,42 @@
           R.bones = {};
           root.traverse(function (o) { if (o.isBone) R.bones[o.name] = o; });
           R.eyes = [R.bones['EyeL'], R.bones['EyeR']].filter(Boolean);
-          R.lids = [R.bones['EyelidL'], R.bones['EyelidR']].filter(Boolean);
+          /* 眼睑可能是骨，也可能是场景根级节点（2.5.0 模型放在根级），按名字全局找 */
+          R.lids = ['EyelidL', 'EyelidR'].map(function (n) { return (root.getObjectByName && root.getObjectByName(n)) || R.bones[n]; }).filter(Boolean);
           /* 眼睑子节点：静止态初始化为 0.01 隐藏；闭眼时 scale→1 覆盖眼球（2.5.0 起） */
           R.lids.forEach(function (b) { b.scale.set(0.01, 0.01, 0.01); });
+          /* 蒙皮自检：统计参与绑定的骨数与“全绑同一骨”占比，写入 R.skinInfo 并上报，便于在日志里识别刚体蒙皮资产（只读诊断，不改网格/骨骼） */
+          (function () {
+            const used = new Set(); let bound0 = 0, total = 0, multi = 0;
+            R.mesh.traverse(function (o) {
+              if (!o.isMesh || !o.geometry) return;
+              const at = o.geometry.attributes;
+              const ja = at.skinIndex || at.joints;
+              const wa = at.skinWeight || at.weights;
+              if (!ja || !ja.array) return;
+              for (let i = 0; i < ja.count; i++) {
+                total++;
+                let allZero = true, nz = 0;
+                for (let k = 0; k < 4; k++) {
+                  const ji = ja.array[i * 4 + k];
+                  used.add(ji);
+                  if (ji !== 0) allZero = false;
+                  if (wa && wa.array[i * 4 + k] > 0.01) nz++;
+                }
+                if (allZero) bound0++;
+                if (nz > 1) multi++;
+              }
+            });
+            R.skinInfo = {
+              verts: total, jointsUsed: used.size,
+              boundToJoint0Pct: total ? +(100 * bound0 / total).toFixed(2) : 0,
+              multiBoneVerts: multi,
+              verdict: bound0 === total ? 'RIGID_SINGLE_BONE' : 'MULTI_BONE_OK'
+            };
+            post({ t: 'dbg', m: '3d skin: verts=' + total + ' jointsUsed=' + used.size +
+              ' boundToJoint0=' + R.skinInfo.boundToJoint0Pct + '% multiBone=' + multi +
+              ' verdict=' + R.skinInfo.verdict });
+          })();
           if (!R.bones['Head']) throw new Error('骨骼不符：缺 Head');
           post({ t: 'dbg', m: '3d bones eyes=[' + R.eyes.map(function (b) { return b.name; }).join(',') + '] lids=[' + R.lids.map(function (b) { return b.name; }).join(',') + '] n=' + R.eyes.length + ' head=' + (R.bones['Head'] ? 'yes' : 'no') });
 
@@ -811,6 +845,69 @@
     return true;
   }
 
+
+  /* ---- 程序化姿态层：不依赖模型剪辑幅度，任何壳/任何模型版本都能让猫动起来 ---- */
+  function rc3Apply(t, dt) {
+    const R = R3; if (!R) return;
+    const b = R.bones || {};
+    const T = t / 1000;
+    const st = R.state || 'idle';
+    if (R.baseY == null && R.root) R.baseY = R.root.position.y;
+
+    /* 各状态目标：整体升降 / 低头 / 腿折叠强度 */
+    let dY = 0, hX = 0, fold = 0;
+    if (st === 'sleep') { dY = -0.052; hX = 0.42; fold = 1; }
+    else if (st === 'sit') { dY = -0.032; hX = -0.14; fold = 0.55; }
+    else if (st === 'eat') { dY = -0.008; hX = 0.34; fold = 0.15; }
+    else if (st === 'walk') { dY = 0.005 * Math.sin(T * 8.6); }
+    else { dY = 0.0022 * Math.sin(T * 2.0); }
+
+    const k = Math.min(1, dt / 0.32);
+    R.procY = (R.procY == null) ? 0 : R.procY;
+    R.procHeadX = (R.procHeadX == null) ? 0 : R.procHeadX;
+    R.procFold = (R.procFold == null) ? 0 : R.procFold;
+    R.procY += (dY - R.procY) * k;
+    R.procHeadX += (hX - R.procHeadX) * k;
+    R.procFold += (fold - R.procFold) * k;
+
+    if (R.root && R.baseY != null) R.root.position.y = R.baseY + R.procY;
+
+    /* 呼吸：Spine/Chest 轻微缩放（走路时更明显） */
+    const amp = (st === 'walk' ? 0.05 : 0.032);
+    const br = 1 + amp * Math.sin(T * (st === 'walk' ? 3.4 : 2.0));
+    if (b['Spine']) b['Spine'].scale.set(br, br, br);
+    if (b['Chest']) b['Chest'].scale.set(1 + (br - 1) * 0.6, 1 + (br - 1) * 0.6, 1 + (br - 1) * 0.6);
+
+    /* 尾巴链式摆动（睡眠放慢） */
+    const w = st === 'sleep' ? 0.7 : 1.5;
+    const tw = Math.sin(T * w);
+    if (b['Tail1']) b['Tail1'].rotation.y = 0.14 * tw;
+    if (b['Tail2']) b['Tail2'].rotation.y = 0.18 * Math.sin(T * w - 0.45);
+    if (b['Tail3']) b['Tail3'].rotation.y = 0.22 * Math.sin(T * w - 0.9);
+    if (b['Tail4']) b['Tail4'].rotation.y = 0.26 * Math.sin(T * w - 1.35);
+    if (st === 'sleep' && b['Tail1']) b['Tail1'].rotation.z = 0.35 * R.procFold;
+
+    /* 走路：四腿交替摆动 + 低一级关节屈伸 */
+    const walking = (st === 'walk');
+    const ph = T * 8.6;
+    const s1 = Math.sin(ph), s2 = Math.sin(ph + Math.PI);
+    const swing = walking ? 0.62 : 0;
+    const knee = walking ? 0.35 : 0;
+    if (b['FrontUpperL']) b['FrontUpperL'].rotation.x = swing * s1 - 0.9 * R.procFold;
+    if (b['FrontUpperR']) b['FrontUpperR'].rotation.x = swing * s2 - 0.9 * R.procFold;
+    if (b['BackUpperL']) b['BackUpperL'].rotation.x = swing * s2 - 1.15 * R.procFold;
+    if (b['BackUpperR']) b['BackUpperR'].rotation.x = swing * s1 - 1.15 * R.procFold;
+    if (b['FrontLowerL']) b['FrontLowerL'].rotation.x = knee * s1 - 0.5 * R.procFold;
+    if (b['FrontLowerR']) b['FrontLowerR'].rotation.x = knee * s2 - 0.5 * R.procFold;
+    if (b['BackLowerL']) b['BackLowerL'].rotation.x = knee * s2 + 0.85 * R.procFold;
+    if (b['BackLowerR']) b['BackLowerR'].rotation.x = knee * s1 + 0.85 * R.procFold;
+
+    /* 睡眠把上身轻微前伏、耳朵放松 */
+    if (b['Chest']) b['Chest'].rotation.x = 0.12 * R.procFold;
+    if (b['EarL']) b['EarL'].rotation.x = 0.18 * R.procFold;
+    if (b['EarR']) b['EarR'].rotation.x = 0.18 * R.procFold;
+  }
+
   /* 状态机：idle/walk/sit/sleep/eat；sleep 闭眼由剪辑内置，眨眼不打断状态 */
   function rc3SetState(name) {
     const R = R3; if (!R || !R.on) return;
@@ -834,6 +931,8 @@
     if (!R.last) R.last = t;
     const dt = Math.min(0.1, (t - R.last) / 1000);
     R.last = t;
+    /* 每帧写入顺序（固定，勿调换）：① mixer.apply 剪辑通道 → ② 看门狗续播掉停/掉权的动作 → ③ rc3Apply 程序化姿态层在剪辑结果上叠加 → ④ 枢轴转向 / 头部注视叠加 → ⑤ 眨眼。
+       程序化层每帧在剪辑之后写骨，只覆盖其目标通道，不回写 mixer；切换状态时 rc3Play 先 stop 旧动作并清零权重，再 reset/play 新动作，避免两套姿态叠加回跳。 */
     if (R.mixer) R.mixer.update(dt);
     /* 姿态看门狗：任何情况下当前动作都必须 running 且权重≈1，否则重播（防外部 stop/权重被清零导致定格） */
     if (R.mixer && R.curAct && (!R.curAct.isRunning() || R.curAct.getEffectiveWeight() < 0.5)) {
@@ -843,6 +942,8 @@
         R.curAct.setEffectiveTimeScale(1); R.curAct.setEffectiveWeight(1); R.curAct.play();
       } catch (e) {}
     }
+
+    rc3Apply(t, dt);
 
     /* 朝向：站立回正 0°，走路侧身 ±90°；确定性 0.25s smoothstep 缓动，施加在加入 scene 的 pivot 上（不碰被 mixer 驱动的骨） */
     if (R.root) {
@@ -863,7 +964,7 @@
       R.headCurY += (R.lookX * 0.5 - R.headCurY) * k;
       R.headCurX += (R.lookY * 0.15 - R.headCurX) * k;
       head.rotation.y = R.headCurY;
-      head.rotation.x = R.headCurX;
+      head.rotation.x = R.headCurX + (R.procHeadX || 0);
       /* 耳骨轻微抖动 */
       const jitter = Math.sin(t / 90) * 0.02;
       const earL = R.bones['EarL'], earR = R.bones['EarR'];
@@ -1041,6 +1142,29 @@
   window.__blinkInfo = function () {
     if (!R3) return { on: false };
     return { on: R3.on, state: R3.state, cur: R3.cur, acts: Object.keys(R3.acts), eyes: R3.eyes.map(function (b) { return b.name; }), lids: R3.lids.map(function (b) { return b.name; }), walkActive: R3.walkActive, rot: R3.root ? R3.root.rotation.y : null };
+  };
+
+  /* 只读诊断探针：供总线 eval 读取状态/蒙皮自检结果/关键骨四元数与世界平移，不改动任何场景对象 */
+  window.__rc3Probe = function () {
+    if (!R3) return { on: false };
+    const grab = function (name) {
+      const b = R3.bones[name];
+      if (!b) return null;
+      const e = b.matrixWorld.elements;
+      const q = b.quaternion;
+      return { name: name,
+        quat: [+q.x.toFixed(6), +q.y.toFixed(6), +q.z.toFixed(6), +q.w.toFixed(6)],
+        worldPos: [+e[12].toFixed(6), +e[13].toFixed(6), +e[14].toFixed(6)] };
+    };
+    return {
+      on: R3.on, state: R3.state, cur: R3.cur,
+      acts: Object.keys(R3.acts), skinInfo: R3.skinInfo,
+      mixer: R3.mixer ? {
+        bindings: R3.mixer._bindings.length,
+        unbound: R3.mixer._bindings.filter(function (b) { return !b.binding || !b.binding.node; }).length
+      } : null,
+      Head: grab('Head'), Hips: grab('Hips')
+    };
   };
 
   /* ---------- page -> host（拖动与右键交给宿主处理，页面只在点按猫头时摸一下） ---------- */
