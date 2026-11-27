@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.27.16",
+  "version": "2026.11.27.17",
   "updated": "2026-11-27",
   "looks": [
     "looks/orange.json",
@@ -20,18 +20,20 @@
     {
       "id": "ragdoll3d",
       "name": "布偶·3D骨骼猫",
-      "ver": "2.5.1",
-      "file": "models/ragdoll3d-2.5.1.zip",
+      "ver": "2.5.2",
+      "file": "models/ragdoll3d-2.5.2.zip",
       "size": 505485,
-      "kind": "glb"
+      "kind": "glb",
+      "bytes": 507411
     },
     {
       "id": "real-ragdoll",
       "name": "真猫·布偶（3D骨骼·老壳兼容）",
-      "ver": "2.5.1",
-      "file": "models/real-ragdoll-3d-2.5.1.zip",
+      "ver": "2.5.2",
+      "file": "models/real-ragdoll-3d-2.5.2.zip",
       "size": 505513,
-      "kind": "glb"
+      "kind": "glb",
+      "bytes": 507414
     }
   ],
   "page": "page/cat.html",
