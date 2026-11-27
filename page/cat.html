@@ -1,0 +1,905 @@
+<!--HOTPAGE-->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>7paws 同款桌面猫</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;background:transparent;overflow:hidden;
+    font-family:"Segoe UI","Microsoft YaHei",sans-serif;user-select:none;-webkit-user-select:none;}
+  #stage{position:absolute;left:-13%;top:-20.54%;width:126%;height:145.25%;}
+  canvas{background:transparent !important;display:block;}
+
+  /* ---- 照片级真猫（模型包 kind=photo，外观热更，换包不改代码） ---- */
+  #realcat{position:absolute;left:0;right:0;bottom:0.5%;height:82%;display:none;
+    align-items:flex-end;justify-content:center;pointer-events:none;}
+  #realcat.on{display:flex;}
+  #rcImg{height:100%;width:auto;transform-origin:50% 100%;will-change:transform;
+    filter:drop-shadow(0 2px 2px rgba(0,0,0,.18));
+    animation:rcBreathe 3.8s ease-in-out infinite;}
+  @keyframes rcBreathe{0%,100%{transform:translateY(0) scale(1,1);}50%{transform:translateY(-1.2%) scale(1.006,.994);}}
+  #realcat.a-walk #rcImg{animation:rcWalk 1.5s ease-in-out;}
+  @keyframes rcWalk{0%{transform:translateX(-7%);}45%{transform:translateX(9%) rotate(1.4deg);}100%{transform:translateX(0) rotate(0);}}
+  #realcat.a-eat #rcImg{animation:rcEat 1.6s ease-in-out 2;}
+  @keyframes rcEat{0%,100%{transform:translateY(0) rotate(0);}35%,65%{transform:translateY(5%) rotate(-3.5deg) scaleY(.965);}}
+  #realcat.a-bob #rcImg{animation:rcBob .62s ease-out;}
+  @keyframes rcBob{0%,100%{transform:scale(1);}38%{transform:scale(1.07,.93);}}
+  #realcat.a-lean #rcImg{animation:rcLean 2.2s ease-in-out;}
+  @keyframes rcLean{0%,100%{transform:translateY(0) rotate(0);}50%{transform:translateY(2%) rotate(-7deg);}}
+  #realcat.a-sleepy #rcImg{animation:rcBreathe 5.2s ease-in-out infinite;}
+  #rcZ{position:absolute;right:6%;bottom:16%;font:700 11px/1 "Segoe UI",sans-serif;color:#8a8f95;
+    opacity:0;transition:opacity .3s;}
+  #realcat.a-sleepy #rcZ{opacity:1;}
+
+  /* ---- key label chip (same as 7paws src/style.css) ---- */
+  .chip{position:fixed;z-index:14;pointer-events:none;transform:translate(-50%,-50%);
+    padding:2px 7px;border:1px solid rgba(20,20,18,.12);border-radius:7px;background:#fffdf6;
+    color:#22211d;font-size:12px;font-weight:700;box-shadow:0 3px 8px rgba(0,0,0,.14);
+    animation:chipRise .78s ease-out forwards;}
+  @keyframes chipRise{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.85);}
+    18%{opacity:1;transform:translate(-50%,-50%) scale(1);}
+    100%{opacity:0;transform:translate(-50%,-150%) scale(.98);}
+  }
+
+  /* ---- low-poly bowl, drawn flat to match the cat ---- */
+  #bowl{position:absolute;left:2%;bottom:1%;width:38%;display:none;pointer-events:none;
+    filter:drop-shadow(0 3px 2px rgba(0,0,0,.22));}
+  #bowl.show{display:block;}
+
+  #bubble{position:absolute;left:50%;top:2%;transform:translateX(-50%) scale(.9);
+    max-width:88%;padding:7px 11px;border-radius:12px;background:rgba(38,51,56,.92);
+    color:#f6f2e8;font-size:13px;line-height:1.35;opacity:0;transition:opacity .18s, transform .18s;
+    pointer-events:none;white-space:pre-wrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+  #bubble.show{opacity:1;transform:translateX(-50%) scale(1);}
+
+  #food{position:absolute;left:0;bottom:0;width:100%;height:100%;pointer-events:none;}
+  /* ---- 远程请求面板：不许会躲，躲三次就变可以 ---- */
+  #ask{position:absolute;left:50%;top:5%;transform:translateX(-50%) scale(.94);width:92%;padding:12px 14px 14px;
+    border-radius:14px;background:rgba(255,250,240,.97);box-shadow:0 6px 18px rgba(0,0,0,.28);
+    border:1px solid rgba(200,150,90,.45);opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;z-index:9;}
+  #ask.show{opacity:1;transform:translateX(-50%) scale(1);pointer-events:auto;}
+  #askText{font-size:14px;color:#5a4128;text-align:center;line-height:1.4;margin-bottom:10px;}
+  #askBtns{position:relative;height:34px;}
+  #askYes,#askNo{position:absolute;top:0;height:30px;border-radius:14px;border:none;font-size:13px;
+    padding:0 16px;cursor:pointer;transition:left .3s cubic-bezier(.3,1.4,.5,1), top .3s;}
+  #askYes{left:10%;background:#e2685f;color:#fff;}
+  #askNo{left:58%;background:#efe6d6;color:#6b4f2b;}
+  #askNo.ok{background:#e2685f;color:#fff;}
+  #hugHeart{position:absolute;left:50%;top:36%;font-size:46px;color:#e2685f;opacity:0;
+    transform:translate(-50%,0) scale(.4);transition:transform .5s cubic-bezier(.2,1.6,.4,1), opacity .5s;pointer-events:none;z-index:8;}
+  #hugHeart.on{opacity:1;transform:translate(-50%,-22px) scale(1.1);}
+
+  /* 联机设置面板（页面内输入，避免系统对话框弹不出来） */
+  #link{position:absolute;left:50%;top:6%;transform:translateX(-50%) scale(.94);width:92%;padding:10px 12px 12px;
+    border-radius:14px;background:rgba(255,250,240,.97);box-shadow:0 6px 18px rgba(0,0,0,.28);
+    border:1px solid rgba(200,150,90,.45);opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;z-index:10;}
+  #link.show{opacity:1;transform:translateX(-50%) scale(1);pointer-events:auto;}
+  #link .row{display:flex;align-items:center;margin-bottom:6px;font-size:11px;color:#5a4128;}
+  #link .row span{width:32px;flex:0 0 32px;}
+  #link input{flex:1;min-width:0;font-size:11px;padding:3px 5px;border-radius:6px;border:1px solid #e0c8a8;background:#fffdf7;color:#5a4128;}
+  #linkBtns{display:flex;justify-content:flex-end;gap:8px;margin-top:2px;}
+  #linkBtns button{height:24px;border-radius:12px;border:none;font-size:11px;padding:0 12px;cursor:pointer;}
+  #linkOk{background:#e2685f;color:#fff;}
+  #linkNo{background:#efe6d6;color:#6b4f2b;}
+  /* 自由配色面板（仿 7paws：色槽 + 二级色板 + 图案切换） */
+  #palette{position:fixed;left:5px;right:5px;bottom:4px;padding:6px 7px 7px;transform:none;
+    border-radius:13px;background:rgba(255,250,240,.97);box-shadow:0 6px 18px rgba(0,0,0,.26);box-sizing:border-box;
+    border:1px solid rgba(200,150,90,.45);opacity:0;pointer-events:none;transition:opacity .18s;z-index:12;}
+  #palette.show{opacity:1;pointer-events:auto;}
+  #palette .prow{display:flex;justify-content:space-between;gap:4px;margin-bottom:5px;}
+  #palette .slot{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;font-size:8px;color:#5a4128;}
+  #palette .slot i{width:20px;height:20px;border-radius:50%;border:2px solid rgba(120,90,60,.35);display:block;box-sizing:border-box;}
+  #palette .pats{display:flex;gap:4px;margin-bottom:5px;}
+  #palette .pat{flex:1;height:19px;border-radius:10px;border:1px solid #e0c8a8;background:#fffdf7;font-size:10px;color:#5a4128;cursor:pointer;padding:0;}
+  #palette .pat.on{background:#e2685f;color:#fff;border-color:#e2685f;}
+  #paletteBtns{display:flex;justify-content:flex-end;gap:6px;}
+  #paletteBtns button{height:22px;border-radius:11px;border:none;font-size:10px;padding:0 10px;cursor:pointer;}
+  #palNo{background:#efe6d6;color:#6b4f2b;}
+  #palSave{background:#e2685f;color:#fff;}
+  #swatchPop{position:absolute;width:148px;padding:7px;border-radius:11px;background:#fffdf7;display:none;
+    box-shadow:0 8px 22px rgba(0,0,0,.3);border:1px solid rgba(200,150,90,.5);z-index:20;box-sizing:border-box;}
+  #swatchPop.show{display:block;}
+  #swGrid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;}
+  #swGrid b{height:18px;border-radius:5px;cursor:pointer;border:1px solid rgba(0,0,0,.08);}
+  #hexIn{width:100%;margin-top:6px;font-size:11px;padding:2px 5px;border-radius:6px;border:1px solid #e0c8a8;
+    background:#fff;color:#5a4128;box-sizing:border-box;}
+  /* 拥抱时来另一只猫依偎在旁边 */
+  #peerWrap{position:absolute;right:-6%;bottom:-1%;width:54%;height:70%;opacity:0;pointer-events:none;
+    transform:translateX(16px) scale(.96);transition:transform .55s cubic-bezier(.2,1.3,.45,1), opacity .4s;z-index:2;}
+  #peerWrap.on{opacity:1;transform:translateX(-8px);}
+  #peerWrap.lean{transform:translateX(-46px) rotate(-9deg) scale(1.04);}
+  /* 拥抱/相处时飘出来的爱心和闪光 */
+  #hugFx{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:11;}
+  .fx{position:absolute;font-size:14px;line-height:1;opacity:0;will-change:transform,opacity;
+    animation:fxUp 1.9s ease-out forwards;}
+  @keyframes fxUp{
+    0%{opacity:0;transform:translate(0,4px) scale(.55);}
+    25%{opacity:1;}
+    100%{opacity:0;transform:translate(var(--dx,0px),-52px) scale(1.2);}
+  }
+  #peerHost{width:100%;height:100%;}#peerBubble{position:absolute;left:50%;top:-6%;transform:translateX(-50%) scale(.9);max-width:96%;padding:6px 10px;border-radius:11px;background:rgba(38,51,56,.92);color:#f6f2e8;font-size:12px;line-height:1.3;opacity:0;transition:opacity .18s,transform .18s;white-space:pre-wrap;text-align:center;z-index:6;}#peerBubble.show{opacity:1;transform:translateX(-50%) scale(1);}
+</style>
+<script src="three.min.js"></script>
+<script src="7paws.js"></script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="realcat"><img id="rcImg" alt="" /><div id="rcZ">Z z</div></div>
+<div id="peerWrap"><div id="peerHost"></div><div id="peerBubble"></div></div>
+<div id="ask">
+  <div id="askText"></div>
+  <div id="askBtns"><button id="askYes">可以</button><button id="askNo">不许</button></div>
+</div>
+<div id="hugHeart">&#9829;</div>
+<div id="hugFx"></div>
+
+<svg id="bowl" viewBox="0 0 120 86" aria-hidden="true">
+  <polygon points="12,34 108,34 96,78 24,78" fill="#d9cbb6"/>
+  <polygon points="12,34 108,34 96,78 60,78 60,34" fill="#c9b9a0"/>
+  <ellipse cx="60" cy="34" rx="48" ry="11" fill="#f6efe2"/>
+  <ellipse cx="60" cy="35" rx="41" ry="8.5" fill="#e6dcc8"/>
+  <g id="foodgroup">
+    <ellipse cx="46" cy="34" rx="7" ry="4" fill="#e9973f"/>
+    <ellipse cx="63" cy="32" rx="7.5" ry="4.2" fill="#f2ac5c"/>
+    <ellipse cx="77" cy="35" rx="6.5" ry="3.8" fill="#c26a1f"/>
+    <ellipse cx="56" cy="37" rx="6" ry="3.4" fill="#d8863a"/>
+  </g>
+</svg>
+
+<div id="link">
+  <div class="row"><span>房号</span><input id="lkRoom" maxlength="6" placeholder="6 位数字" /></div>
+  <div class="row"><span>昵称</span><input id="lkNick" maxlength="16" placeholder="catA" /></div>
+  <div id="linkBtns"><button id="linkNo">取消</button><button id="linkOk">连接</button></div>
+</div>
+<div id="palette">
+  <div class="prow">
+    <div class="slot" data-slot="fur"><i id="swFur"></i><span>毛色</span></div>
+    <div class="slot" data-slot="patch"><i id="swPatch"></i><span>斑块</span></div>
+    <div class="slot" data-slot="accent"><i id="swAccent"></i><span>第三色</span></div>
+    <div class="slot" data-slot="eye"><i id="swEye"></i><span>左眼</span></div>
+    <div class="slot" data-slot="eye2"><i id="swEye2"></i><span>右眼</span></div>
+  </div>
+  <div class="pats">
+    <button class="pat" data-pat="solid">纯色</button>
+    <button class="pat" data-pat="tabby">虎斑</button>
+    <button class="pat" data-pat="calico">三花</button>
+    <button class="pat" data-pat="bicolor">双色</button>
+  </div>
+  <div id="paletteBtns"><button id="palNo">取消</button><button id="palSave">保存这只</button></div>
+</div>
+<div id="swatchPop"><div id="swGrid"></div><input id="hexIn" maxlength="7" placeholder="#e9973f" /></div><div id="bubble"></div>
+<svg id="food" viewBox="0 0 100 100"></svg>
+
+<script>
+(function () {
+  const post = (m) => { try { window.chrome.webview.postMessage(m); } catch (e) {} };
+  const qs = new URLSearchParams(location.search);
+  const initialCoat = qs.get('coat') || 'orange';
+  const stage = document.getElementById('stage');
+
+  let api = null;
+  try {
+    api = window.createCat(stage, {
+      coat: initialCoat,
+      idleActions: true,
+      sleepMinutes: Number(qs.get('sleep') || 45),
+      pixelRatio: Math.min(2, window.devicePixelRatio || 1),
+      onError: (m) => post({ t: 'err', m: String(m) })
+    });
+  } catch (e) { post({ t: 'err', m: String(e) }); }
+
+  /* ---------- coat palette: identical maths to 7paws src/pet/catPalette.ts ---------- */
+  const mixHex = (a, b, t) => {
+    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    const ch = (s) => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
+    return '#' + [ch(16), ch(8), ch(0)].map(v => v.toString(16).padStart(2, '0')).join('');
+  };
+  const luminance = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+  };
+  function buildCoatPalette(c) {
+    const fur = c.fur, lum = luminance(fur), pale = lum > 0.78;
+    const line = lum < 0.2 ? mixHex(fur, '#b5b1a2', 0.6)
+      : lum > 0.8 ? mixHex(fur, '#8a8676', 0.75)
+      : mixHex(fur, '#1c1a16', 0.5);
+    const stripe = mixHex(fur, '#1c1a16', 0.28);
+    const whisker = lum > 0.7 ? '#b5b1a2' : '#f4f4ee';
+    const inner = mixHex(fur, '#f2b9b0', pale ? 0.65 : 0.45);
+    const base = {
+      pattern: c.pattern, fur, patch: c.patch, line,
+      eye: c.eye, eye2: c.eye2 || c.eye, whisker, whiskerOut: line, stripe, inner,
+      spots: c.spots || []
+    };
+    switch (c.pattern) {
+      case 'solid':   return Object.assign({}, base, { pattern: 'solid', patch: fur, stripe: fur });
+      case 'tabby':   return Object.assign({}, base, { pattern: 'tabby' });
+      case 'calico':  return Object.assign({}, base, { pattern: 'calico', patch: fur,
+                        patchA: c.patch, patchB: c.accent, tail: c.accent, stripe: fur });
+      default:        return Object.assign({}, base, { pattern: 'bicolor' });
+    }
+  }
+
+  const bowl = document.getElementById('bowl');
+  const bubble = document.getElementById('bubble');
+  const food = document.getElementById('food');
+  let bubbleTimer = 0, feedTimer = 0;
+
+  /* 小猫窗口：直接通过 URL 传毛色，避免和多窗口消息桥打交道 */
+  try {
+    const cj = qs.get('cjson');
+    if (cj && api) {
+      const o = JSON.parse(cj);
+      window.__selfCoat = o;
+      api.setCustomCoat(buildCoatPalette(o));
+    }
+  } catch (e) { }
+
+  /* ---------- 拥抱：另一只猫跑来依偎 ---------- */
+  const peerWrap = document.getElementById('peerWrap');
+  const peerHost = document.getElementById('peerHost');
+  let peerApi = null, peerTimer = 0, peerBubTimer = 0;
+  function guestShow(coat, text, mode) {
+    try {
+      if (!peerApi) peerApi = window.createCat(peerHost, { coat: 'orange', idleActions: true, sleepMinutes: 999 });
+      if (coat && (coat.fur || coat.kind === 'custom')) {
+        try { peerApi.setCustomCoat(buildCoatPalette(coat)); } catch (e) {}
+      }
+      peerWrap.classList.add('on');
+      if (mode === 'hug') peerWrap.classList.add('lean'); else peerWrap.classList.remove('lean');
+      try { peerApi.tap(mode === 'hug' ? 'Right' : 'Left'); } catch (e) {}
+      if (text) {
+        const pb = document.getElementById('peerBubble');
+        pb.textContent = String(text);
+        pb.classList.add('show');
+        clearTimeout(peerBubTimer);
+        peerBubTimer = setTimeout(function () { pb.classList.remove('show'); }, 4800);
+      }
+      clearTimeout(peerTimer);
+      peerTimer = setTimeout(function () { peerWrap.classList.remove('on'); peerWrap.classList.remove('lean'); }, mode === 'hug' ? 4800 : 5600);
+      if (mode === 'hug') startHugFx();
+    } catch (e) {}
+  };
+  /* 爱心 / 闪光：在两只猫中间往上飘 */
+  let fxTimer = 0;
+  const fxChars = ['♥', '♥', '✦', '♥', '✧', '♡'];
+  function fxPuff(n) {
+    const box = document.getElementById('hugFx');
+    if (!box) return;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('span');
+      s.className = 'fx';
+      s.textContent = fxChars[Math.floor(Math.random() * fxChars.length)];
+      s.style.left = (50 + Math.random() * 26) + '%';
+      s.style.top = (34 + Math.random() * 18) + '%';
+      s.style.fontSize = (14 + Math.random() * 12) + 'px';
+      s.style.color = Math.random() < 0.7 ? '#e2685f' : '#f2b544';
+      s.style.setProperty('--dx', (-18 + Math.random() * 36).toFixed(0) + 'px');
+      s.style.animationDelay = (Math.random() * 0.35).toFixed(2) + 's';
+      box.appendChild(s);
+      setTimeout(function () { s.remove(); }, 2600);
+    }
+  }
+  function startHugFx() {
+    clearInterval(fxTimer);
+    fxPuff(6);
+    let ticks = 0;
+    fxTimer = setInterval(function () {
+      fxPuff(3);
+      ticks++;
+      if (ticks >= 9) clearInterval(fxTimer);
+    }, 520);
+  }
+  function hugPairShow(coat) { rcWake(); if (rcOn) rcAct('lean', 2600); guestShow(coat, '', 'hug'); }
+  /* ---------- 联机设置面板 ---------- */
+  const linkBox = document.getElementById('link');
+  const lkRoom = document.getElementById('lkRoom');
+  const lkNick = document.getElementById('lkNick');
+  function linkClose() { linkBox.classList.remove('show'); post({ t: 'panel', on: 0 }); }
+  function linkOpen(room, nick) {
+    lkRoom.value = room || '';
+    lkNick.value = nick || '';
+    linkBox.classList.add('show');
+    post({ t: 'panel', on: 1 });
+    setTimeout(function () { try { lkRoom.focus(); lkRoom.select(); } catch (e) {} }, 80);
+  };
+  document.getElementById('linkOk').addEventListener('click', function () {
+    const r = String(lkRoom.value || '').replace(/[^0-9]/g, '').slice(0, 6);
+    const n = String(lkNick.value || '').trim();
+    linkClose();
+    post({ t: 'link', room: r, nick: n });
+  });
+  /* ---------- 自由配色（仿 7paws：色槽 → 二级色板） ---------- */
+  const SWATCHES = ['#151515','#2b2620','#3f3324','#4d3d2b','#7a4312','#8b8f86',
+    '#a08a6c','#b5b1a2','#c26a1f','#e9973f','#e2b93b','#c79a2e',
+    '#8090a0','#667686','#5c8a3a','#5aa9c9','#fbe8c9','#f8f6ef',
+    '#f4a7c3','#ffd93d','#7fe4b4','#7cc9ff','#b39dff','#ff8a65'];
+  const palBox = document.getElementById('palette');
+  const pop = document.getElementById('swatchPop');
+  const swGrid = document.getElementById('swGrid');
+  const hexIn = document.getElementById('hexIn');
+  const slotEls = {};
+  Array.prototype.forEach.call(document.querySelectorAll('#palette .slot'), function (el) {
+    slotEls[el.dataset.slot] = el.querySelector('i');
+  });
+  let palCat = null, palSlot = null;
+  const slotId = { fur: 'swFur', patch: 'swPatch', accent: 'swAccent', eye: 'swEye', eye2: 'swEye2' };
+
+  SWATCHES.forEach(function (hex) {
+    const b = document.createElement('b');
+    b.style.background = hex;
+    b.title = hex;
+    b.addEventListener('click', function () { pickColor(hex); });
+    swGrid.appendChild(b);
+  });
+
+  function palPaint() {
+    if (!palCat) return;
+    for (const k in slotId) {
+      const el = document.getElementById(slotId[k]);
+      if (el) el.style.background = palCat[k] || palCat.fur || '#e9973f';
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('#palette .pat'), function (b) {
+      b.classList.toggle('on', b.dataset.pat === palCat.pattern);
+    });
+  }
+  function palApply() {
+    if (!palCat) return;
+    window.__selfCoat = palCat;
+    try { if (api) api.setCustomCoat(buildCoatPalette(palCat)); } catch (e) {}
+  }
+  function popClose() { palSlot = null; pop.classList.remove('show'); }
+  function pickColor(hex) {
+    if (!palCat || !palSlot) return;
+    palCat[palSlot] = String(hex).toLowerCase();
+    if (palSlot === 'eye') { palCat.eye2 = palCat.eye; }
+    popClose(); palPaint(); palApply();
+  }
+  function popOpen(slot, el) {
+    palSlot = slot;
+    hexIn.value = palCat[slot] || '';
+    pop.classList.add('show');
+    // 摆在色槽上方，超出窗口就贴边
+    const bx = el.getBoundingClientRect(), w = 148, h = 118;
+    const pw = palBox.offsetWidth || 250;
+    const hostRect = stage.getBoundingClientRect();
+    let left = bx.left + bx.width / 2 - w / 2;
+    left = Math.max(4, Math.min(left, (window.innerWidth || pw) - w - 4));
+    let top = bx.top - h - 6;
+    if (top < 4) top = bx.bottom + 6;
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+    try { hexIn.focus(); } catch (e) {}
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#palette .slot'), function (el) {
+    el.addEventListener('click', function () {
+      const s = el.dataset.slot;
+      if (palSlot === s) { popClose(); return; }
+      popOpen(s, el);
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#palette .pat'), function (b) {
+    b.addEventListener('click', function () {
+      if (!palCat) return;
+      palCat.pattern = b.dataset.pat;
+      palPaint(); palApply();
+    });
+  });
+  hexIn.addEventListener('change', function () {
+    let v = String(hexIn.value || '').trim();
+    if (!v) return;
+    if (v.charAt(0) !== '#') v = '#' + v;
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) pickColor(v);
+    else if (palCat && palSlot) hexIn.value = palCat[palSlot] || '';
+  });
+  hexIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); hexIn.blur(); } });
+
+  function paletteOpen(cat) {
+    palCat = Object.assign({ fur: '#e9973f', patch: '#c26a1f', accent: '#c26a1f',
+      eye: '#6b9440', eye2: '#6b9440', pattern: 'tabby' }, cat || {});
+    palPaint(); palApply();
+    palBox.classList.add('show');
+    post({ t: 'panel', on: 1 });
+  }
+  function paletteClose() {
+    popClose();
+    palBox.classList.remove('show');
+    palCat = null;
+    post({ t: 'panel', on: 0 });
+  }
+  document.getElementById('palNo').addEventListener('click', function () {
+    paletteClose();
+    post({ t: 'palcancel' });
+  });
+  document.getElementById('palSave').addEventListener('click', function () {
+    if (!palCat) return;
+    const c = Object.assign({}, palCat);
+    paletteClose();
+    post({ t: 'newcat', cat: c });
+  });
+  window.addEventListener('mousedown', function (e) {
+    if (pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('.slot')) popClose();
+    // 点面板以外的地方就收起面板，避免宿主一直以为面板开着（会导致整块区域可点）
+    // 色板弹层（#swatchPop）是独立浮层，点它不算点面板外面
+    if (palBox.classList.contains('show') && !e.target.closest('#palette') && !e.target.closest('#swatchPop')) paletteClose();
+    if (linkBox.classList.contains('show') && !e.target.closest('#link')) linkClose();
+  }, true);
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (palBox.classList.contains('show')) paletteClose();
+      if (linkBox.classList.contains('show')) linkClose();
+    }
+  });
+
+  document.getElementById('linkNo').addEventListener('click', linkClose);
+  /* ---------- host -> page ---------- */
+  /* ---------- 照片级真猫模型（外观包热更，kind=photo，换包不改代码） ---------- */
+  const rcBox = document.getElementById('realcat');
+  const rcImg = document.getElementById('rcImg');
+  let rcOn = false, rcPack = null, rcBase = '', rcTimer = 0, rcPose = '', rcLastAct = Date.now();
+  const rcSleepAfter = Math.max(1, Number(qs.get('sleep') || 45)) * 60 * 1000;
+
+  function rcPoseTo(key) {
+    if (!rcPack || !rcPack.layers) return;
+    const f = rcPack.layers[key] || rcPack.layers.stand;
+    if (!f) return;
+    const src = rcBase + 'img/' + f + '?v=' + encodeURIComponent(rcPack.ver || '');
+    if (rcImg.dataset.src !== src) { rcImg.src = src; rcImg.dataset.src = src; }
+    rcPose = key;
+  }
+  function rcAct(name, ms) {
+    rcBox.classList.remove('a-bob', 'a-walk', 'a-eat', 'a-lean');
+    void rcBox.offsetWidth;
+    if (!name) return;
+    rcBox.classList.add('a-' + name);
+    clearTimeout(rcTimer);
+    if (ms) rcTimer = setTimeout(function () { rcBox.classList.remove('a-' + name); }, ms);
+  }
+  function rcWake() {
+    rcLastAct = Date.now();
+    rcLastPose = Date.now();
+    rcBox.classList.remove('a-sleepy');
+    if (rcPose === 'lie') rcPoseTo(rcPack && rcPack.pose ? rcPack.pose : 'stand');
+  }
+  function rcOff() {
+    rcOn = false; rcPack = null; rcPose = '';
+    rcBox.classList.remove('on', 'a-bob', 'a-walk', 'a-eat', 'a-lean', 'a-sleepy');
+    Array.prototype.forEach.call(document.querySelectorAll('#stage canvas'), function (c) { c.style.display = ''; });
+  }
+  function rcModel(id) {
+    rcOff();
+    if (!id) { post({ t: 'modelok', id: '' }); return; }
+    const base = 'https://packs.local/models/' + id + '/';
+    return fetch(base + 'pack.json', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (pack) {
+      if (String(pack.kind) !== 'photo') throw new Error('不是照片模型包');
+      rcPack = pack; rcBase = base;
+      rcImg.dataset.src = '';
+      rcPoseTo(pack.pose || 'stand');
+      rcBox.classList.add('on');
+      Array.prototype.forEach.call(document.querySelectorAll('#stage canvas'), function (c) { c.style.display = 'none'; });
+      rcOn = true; rcLastAct = Date.now();
+      post({ t: 'modelok', id: id });
+    }).catch(function (e) {
+      rcOff();
+      post({ t: 'err', m: '模型加载失败：' + (e && e.message ? e.message : e) });
+    });
+  }
+  let rcBlinkT = 0, rcLastPose = Date.now();
+  function rcHas(k) { return !!(rcPack && rcPack.layers && rcPack.layers[k]); }
+  function rcBlinkOnce() {
+    if (!rcOn || !rcPack || !rcPack.blink) return;
+    if (rcPose === 'lie' || rcBox.classList.contains('a-sleepy')) return;
+    const b = rcPack.blink[rcPose];
+    if (!b) return;
+    const cur = rcBase + 'img/' + b + '?v=' + encodeURIComponent(rcPack.ver || '');
+    rcImg.src = cur;
+    clearTimeout(rcBlinkT);
+    rcBlinkT = setTimeout(function () {
+      if (!rcOn) return;
+      if (rcImg.dataset.src) rcImg.src = rcImg.dataset.src;
+    }, 170);
+  }
+  // 生命感：眨眼睛 + 偶尔换个姿势（站<->坐），不打扰吃饭/拥抱/睡觉
+  setInterval(function () {
+    if (!rcOn) return;
+    if (Number(qs.get('sleep')) > 999) return;
+    if (rcPose === 'lie' || rcBox.classList.contains('a-sleepy')) return;
+    if (Date.now() - rcLastAct > rcSleepAfter) { rcPoseTo('lie'); rcBox.classList.add('a-sleepy'); return; }
+    if (rcBox.classList.contains('a-eat') || rcBox.classList.contains('a-lean') || rcBox.classList.contains('a-walk')) return;
+    if (Math.random() < 0.45) { rcBlinkOnce(); if (Math.random() < 0.45) setTimeout(rcBlinkOnce, 420); }
+    if (Date.now() - rcLastPose > 45000 + Math.random() * 45000) {
+      const other = rcPose === 'sit' ? 'stand' : 'sit';
+      if (rcHas(other)) { rcPoseTo(other); rcLastPose = Date.now(); }
+    }
+  }, 5000);
+
+  window.pet = {
+    setCoat(c) {
+      window.__selfCoat = c;
+      if (!api || !c) return;
+      if (c.kind === 'builtin') {
+        const cur = (qs.get('coat') || 'orange');
+        if (c.id !== cur) { location.search = '?coat=' + encodeURIComponent(c.id); }
+      }
+      else { api.setCustomCoat(buildCoatPalette(c)); }
+    },
+    say(text, ms) {
+      bubble.textContent = String(text || '');
+      bubble.classList.add('show');
+      clearTimeout(bubbleTimer);
+      bubbleTimer = setTimeout(() => bubble.classList.remove('show'), ms || 2600);
+    },
+    setBowl(on, food) {
+      bowl.classList.toggle('show', !!on);
+      const g = document.getElementById('foodgroup');
+      const items = g.children;
+      const n = Math.max(0, Math.min(items.length, food == 0 ? 0 : Math.ceil(food / 25)));
+      for (let i = 0; i < items.length; i++) items[i].style.opacity = i < n ? '1' : '0.12';
+    },
+    tap(side) { rcWake(); if (rcOn) { rcAct('bob', 600); return; } if (api) api.tap(side === 'R' ? 'Right' : 'Left'); },
+    idle(name, ms) { if (api && api.idleAction) api.idleAction(name, ms); },
+    layout(id) { if (api && api.setLayout) api.setLayout(id); },
+    feed() {
+      if (rcOn) {
+        rcWake();
+        rcPoseTo('stand');
+        rcAct('walk', 1500);
+        clearTimeout(feedTimer);
+        feedTimer = setTimeout(function () { rcPoseTo('sit'); rcAct('eat', 3200); }, 1450);
+        setTimeout(function () { if (rcOn && !rcBox.classList.contains('a-sleepy')) rcPoseTo(rcPack && rcPack.pose ? rcPack.pose : 'stand'); }, 4800);
+        return;
+      }
+      if (!api) return;
+      /* 走向饭碗 → 低头吃 → 抬爪舔嘴 */
+      try { api.idleAction('walk', 1500, -1); } catch (e) { }
+      clearTimeout(feedTimer);
+      setTimeout(function () {
+        try { api.idleAction('lick', 3200); } catch (e) { }
+      }, 1450);
+    },
+    guest: guestShow,
+    hugPair: hugPairShow,
+    link: linkOpen,
+    palette: paletteOpen,
+    paletteOff: paletteClose,
+    model: rcModel,
+    modelSleep: function () { rcPoseTo('lie'); rcBox.classList.add('a-sleepy'); },
+    modelOff: rcOff
+  };
+
+  /* ---------- page -> host（拖动与右键交给宿主处理，页面只在点按猫头时摸一下） ---------- */
+  let dragging = false, moved = false, lastX = 0, lastY = 0, downAt = 0;
+
+  function onDown(e) {
+    if (e.button !== 0) return;
+    dragging = true; moved = false;
+    lastX = e.screenX; lastY = e.screenY; downAt = Date.now();
+  }
+  function onMove(e) {
+    if (!dragging) return;
+    if (Math.abs(e.screenX - lastX) + Math.abs(e.screenY - lastY) > 2) moved = true;
+    lastX = e.screenX; lastY = e.screenY;
+  }
+  function onUp(e) {
+    if (!dragging) return;
+    dragging = false;
+  }
+  window.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+  window.addEventListener('blur', () => { dragging = false; });
+
+  /* ---------- social relay over ntfy.sh (https 443, works behind CN networks) ---------- */
+  let es = null, esList = [], myRoom = '', myNick = '', socialOn = false, hbTimer = 0, peerName = '';
+  const seen = new Set();
+  const HOSTS = ['https://ntfy.sh', 'https://ntfy.envs.net', 'https://ntfy.mzte.de'];
+
+  function topicOf(room) { return 'petd-' + room; }
+
+  async function publish(obj) {
+    if (!socialOn) return;
+    const body = Object.assign({}, obj, { from: myNick, ts: Date.now(), v: 'petd/1' });
+    /* 同时发到每条线路：哪条通就走哪条，单条被限流也不会掉消息 */
+    let okCount = 0, lastErr = '';
+    for (const h of HOSTS) {
+      try {
+        const r = await fetch(h + '/' + topicOf(myRoom), {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(body)
+        });
+        if (r.ok) { okCount++; } else { lastErr = 'HTTP ' + r.status; }
+      } catch (e) { lastErr = String(e); }
+    }
+    if (!okCount) { post({ t: 'social', ev: 'err', m: '发布失败 ' + lastErr + '（线路被限流或不通，过几分钟再试）' }); }
+  }
+
+  /* 联机自检：逐条线路测发布，并报告订阅状态 */
+  window.pet.selftest = async function () {
+    const room = myRoom || '000000';
+    const rows = [];
+    let any = false;
+    for (const h of HOSTS) {
+      let code = -1;
+      try {
+        const r = await fetch(h + '/' + topicOf(room), {
+          method: 'POST', headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ type: 'selftest', from: myNick || 'me', ts: Date.now(), v: 'petd/1' })
+        });
+        code = r.status;
+        if (r.ok) any = true;
+      } catch (e) { code = -2; }
+      rows.push(h.replace('https://', '') + '=' + code);
+    }
+    const live = esList.filter(e => e.readyState === 1).length;
+    post({ t: 'social', ev: 'selftest', http: any ? 200 : rows[0].split('=')[1] | 0, sse: live, room: room, nick: myNick || '', m: rows.join(' ') });
+  };
+
+  window.pet.socialConnect = function (room, nick) {
+    myRoom = String(room || '').replace(/[^0-9]/g, '').slice(0, 6);
+    myNick = String(nick || 'pet').replace(/[^0-9A-Za-z_\-\u4e00-\u9fa5]/g, '').slice(0, 16) || 'pet';
+    if (myRoom.length !== 6) { post({ t: 'social', ev: 'state', ok: false, m: 'room must be 6 digits' }); return; }
+    window.pet.socialDisconnect(true);
+    socialOn = true;
+    seen.clear();
+    esList = [];
+    HOSTS.forEach((h) => {
+      let e = null;
+      try { e = new EventSource(h + '/' + topicOf(myRoom) + '/sse'); } catch (err) { return; }
+      e.addEventListener('open', () => {
+        if (h === HOSTS[0]) { post({ t: 'social', ev: 'state', ok: true, state: 'open', room: myRoom, nick: myNick }); }
+        if (esList.indexOf(e) === 0) publish({ type: 'hello' });
+      });
+      e.addEventListener('message', (ev) => {
+        let outer = null;
+        try { outer = JSON.parse(ev.data); } catch (err) { return; }
+        if (!outer || outer.event !== 'message' || !outer.message) return;
+        let inner = null;
+        try { inner = JSON.parse(outer.message); } catch (err) { return; }
+        if (!inner || !inner.type) return;
+        if (inner.from === myNick) return;
+        const key = String(inner.from) + '|' + String(inner.ts) + '|' + String(inner.type);
+        if (seen.has(key)) return;      // 同一条消息从两条线路到达，只处理一次
+        seen.add(key);
+        if (seen.size > 400) { seen.clear(); }
+        if (inner.from) peerName = String(inner.from).slice(0, 16);
+        post({ t: 'social', ev: 'msg', data: inner });
+      });
+      e.addEventListener('error', () => {
+        if (h === HOSTS[0]) { post({ t: 'social', ev: 'state', ok: true, state: 'error', m: h }); }
+      });
+      esList.push(e);
+    });
+    es = esList[0] || null;
+    clearInterval(hbTimer);
+    hbTimer = setInterval(() => { if (socialOn) publish({ type: 'ping' }); }, 60000);
+  };
+
+  window.pet.socialDisconnect = function (quiet) {
+    socialOn = false;
+    clearInterval(hbTimer);
+    esList.forEach((e) => { try { e.close(); } catch (err) {} });
+    esList = [];
+    es = null;
+    if (!quiet) post({ t: 'social', ev: 'state', ok: true, state: 'off' });
+  };
+
+  window.pet.socialSend = function (obj) { publish(obj); };
+
+    /* ---------- 远程请求面板：不许躲三次后变成可以 ---------- */
+  const askBox = document.getElementById('ask');
+  const askText = document.getElementById('askText');
+  const askYes = document.getElementById('askYes');
+  const askNo = document.getElementById('askNo');
+  const askBtns = document.getElementById('askBtns');
+  const askHeart = document.getElementById('hugHeart');
+  let askState = null, askSwapped = false, askTimer = 0;
+
+  function askPlace() {
+    askYes.style.left = askSwapped ? '58%' : '10%';
+    askNo.style.left = askSwapped ? '10%' : '58%';
+    askYes.style.top = '0';
+    askNo.style.top = '0';
+  }
+
+  function askClose() {
+    askBox.classList.remove('show');
+    askState = null;
+    askSwapped = false;
+    askNo.classList.remove('ok');
+    askNo.textContent = '不许';
+    askPlace();
+    clearTimeout(askTimer);
+  }
+
+  function askShow(kind, fromName, extra) {
+    askState = { kind: kind, from: fromName };
+    askSwapped = false;
+    askNo.classList.remove('ok');
+    askNo.textContent = '不许';
+    askPlace();
+    askText.textContent = fromName + (kind === 'breed' ? ' 想和你生一只小猫' : (extra || ' 想拥抱一下'));
+    askBox.classList.add('show');
+    post({ t: 'panel', on: 1 });
+    clearTimeout(askTimer);
+    askTimer = setTimeout(askClose, 25000);
+  }
+
+  /* 鼠标移到「不许」→ 两个按钮原地互换位置（位置固定，不飘、不重叠）
+     加 700ms 锁，避免按钮换到指针下面后反复来回跳 */
+  let askLock = 0;
+  askBtns.addEventListener('mouseleave', function () { askLock = 0; });
+  askNo.addEventListener('mouseenter', function () {
+    if (!askState) return;
+    if (Date.now() < askLock) return;
+    askSwapped = !askSwapped;
+    askPlace();
+    askLock = Date.now() + 700;
+  });
+
+  function askAccept() {
+    if (!askState) return;
+    const st = askState;
+    askClose();
+    if (st.kind === 'breed') { publish({ type: 'breed_ok', to: st.from, cat: window.__selfCoat || null }); }
+    else { publish({ type: 'hug', to: st.from, re: 1, cat: window.__selfCoat || null }); }
+    post({ t: 'askdone', kind: st.kind, from: st.from, ok: true });
+    if (st.kind === 'hug') {
+      askHeart.classList.add('on');
+      setTimeout(function () { askHeart.classList.remove('on'); }, 1400);
+    }
+  }
+
+  askYes.addEventListener('click', askAccept);
+  askNo.addEventListener('click', function () {
+    if (!askState) return;
+    if (askState.kind === 'breed') { publish({ type: 'breed_no', to: askState.from }); }
+    else { publish({ type: 'hug_no', to: askState.from }); }
+    post({ t: 'askdone', kind: askState.kind, from: askState.from, ok: false });
+    askClose();
+  });
+
+    /* ---------- 真机输入桥：系统键盘 / 鼠标位置 ---------- */
+  const downSet = new Set();
+  const btnSet = new Set();
+  let lastAct = Date.now(), busySince = 0, nextWarnAt = 0, rareAt = Date.now();
+
+  /* 睡姿：连续 1 分钟没动就睡着，随机「坐着睡」或「趴着睡」
+     （7paws 本体用 sleepMinutes 自动入睡 = 坐着睡；趴着睡靠周期性触发 loaf 姿势实现） */
+  let sleepPose = null;
+  setInterval(function () {
+    const idle = Date.now() - lastAct;
+    if (idle < 61000) { sleepPose = null; window.__liePose = 0; return; }
+    if (sleepPose === null) sleepPose = (Math.random() < 0.5);
+    window.__liePose = sleepPose ? 1 : 0;
+    if (sleepPose) { try { api.idleAction('loaf', 5200); } catch (e) {} }
+  }, 5000);
+
+  /* 休息提醒：台词与时长可由热更新包覆盖（feats/rest.json） */
+  const REST = {
+    restMinutes: 10,
+    gapMinutes: 2,
+    cooldownMinutes: 120,
+    rareChance: 0.09,
+    common: [
+      '小猫觉得你累了，你该休息一会。',
+      '主人该停止工作了，快陪我玩一会吧。'
+    ],
+    rare: [
+      '{peer} 劝你该喝水了。',
+      '{peer} 见你工作这么久，很担心你。'
+    ]
+  };
+  const peerOf = function (s) { return String(s).replace(/\{peer\}/g, peerName || '好友猫'); };
+  function restTalk() {
+    const nowT = Date.now();
+    const common = REST.common || [];
+    const rare = REST.rare || [];
+    if (peerName && rare.length && nowT - rareAt > (REST.cooldownMinutes || 120) * 60000 && Math.random() < (REST.rareChance || 0.09)) {
+      rareAt = nowT;
+      window.pet.say(peerOf(rare[Math.floor(Math.random() * rare.length)]), 9000);
+      return;
+    }
+    if (common.length) window.pet.say(peerOf(common[Math.floor(Math.random() * common.length)]), 9000);
+  }
+  window.pet.setRest = function (cfg) {
+    if (!cfg) return;
+    try {
+      if (typeof cfg.restMinutes === 'number') REST.restMinutes = Math.max(1, cfg.restMinutes);
+      if (typeof cfg.gapMinutes === 'number') REST.gapMinutes = Math.max(1, cfg.gapMinutes);
+      if (typeof cfg.cooldownMinutes === 'number') REST.cooldownMinutes = Math.max(1, cfg.cooldownMinutes);
+      if (typeof cfg.rareChance === 'number') REST.rareChance = Math.min(1, Math.max(0, cfg.rareChance));
+      if (Array.isArray(cfg.common) && cfg.common.length) REST.common = cfg.common.slice(0, 8);
+      if (Array.isArray(cfg.rare) && cfg.rare.length) REST.rare = cfg.rare.slice(0, 8);
+    } catch (e) {}
+  };
+  window.__restTalk = restTalk;
+  window.__setPeer = function (n) { peerName = String(n || '').slice(0, 16); };
+  window.__restGet = function () { return JSON.stringify(REST); };
+  window.pet.input = function (o) {
+    if (!api || !o) return;
+    try {
+      if (o.kind === 'press' && o.list) {
+        window.__kn = (window.__kn || 0) + o.list.length;
+        window.__lastKeys = o.list.slice();
+        const nowT = Date.now();
+        if (nowT - lastAct > REST.gapMinutes * 60000) { busySince = nowT; nextWarnAt = nowT + REST.restMinutes * 60000; }
+        lastAct = nowT;
+        if (nextWarnAt && nowT >= nextWarnAt) {
+          nextWarnAt = nowT + REST.restMinutes * 60000;
+          restTalk();
+        }
+        o.list.forEach(function (k) {
+          if (!k) return;
+          downSet.add(k);
+          api.setInput(downSet, btnSet);
+          setTimeout(function () {
+            downSet.delete(k);
+            if (api) api.setInput(downSet, btnSet);
+          }, 210);
+        });
+      } else if (o.kind === 'keys' && o.list) {
+        downSet.clear();
+        o.list.forEach(function (k) { downSet.add(k); });
+        api.setInput(downSet, btnSet);
+      } else if (o.kind === 'key' && o.code) {
+        if (o.down) { downSet.add(o.code); } else { downSet.delete(o.code); }
+        api.setInput(downSet, btnSet);
+      } else if (o.kind === 'clear') {
+        downSet.clear();
+        api.setInput(downSet, btnSet);
+      } else if (o.kind === 'wheel' && o.dir) {
+        api.mouseWheel(o.dir);
+      } else if (o.kind === 'mousemove') {
+        api.mouseMoved();
+      }
+    } catch (e) { }
+  };
+  window.pet.pointer = function (x, y) {
+    if (rcOn && rcPose === 'lie' && (Math.abs(x) + Math.abs(y)) > 0.02) rcWake();
+    if (!api) return;
+    try {
+      api.setPointerNdc(x, y);
+      api.mouseMoved();
+      api.setMouseActive();
+    } catch (e) { }
+  };
+
+window.pet.ask = function (kind, fromName, extra) { askShow(kind === 'breed' ? 'breed' : 'hug', fromName, extra); };
+  window.pet.hugFlash = function () {
+    askHeart.classList.add('on');
+    setTimeout(function () { askHeart.classList.remove('on'); }, 1400);
+  };
+  window.pet.talk = function (text) { window.pet.say(text, 5200); };
+
+  /* ---------- 闲不住：偶尔踩一下键盘（其余交给原版的梳毛/舔爪/卧倒/走两步） ---------- */
+  let lastNudge = Date.now();
+  setInterval(function () {
+    if (!api || document.hidden) return;
+    const now = Date.now();
+    if (now - lastNudge < 12000) return;
+    if (Math.random() < 0.35) {
+      api.tap(Math.random() < 0.5 ? 'Left' : 'Right');
+      lastNudge = now;
+    }
+  }, 8000);
+
+  /* ---------- hit regions：与原版一样交给外壳做点击穿透判定 ---------- */
+  function sendRegions() {
+    try { if (api && api.hitRegions) post({ t: 'regions', list: api.hitRegions() }); } catch (e) {}
+  }
+  setTimeout(sendRegions, 400);
+  window.addEventListener('resize', function () { setTimeout(sendRegions, 250); });
+  setInterval(sendRegions, 4000);
+
+  document.addEventListener('pointerdown', function () { post({ t: 'hit' }); }, true);
+  post({ t: 'ready', coats: api && api.coats || [] });
+})();
+</script>
+</body>
+</html>
