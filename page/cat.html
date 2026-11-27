@@ -438,6 +438,7 @@
   const rcBox = document.getElementById('realcat');
   const rcImg = document.getElementById('rcImg');
   let rcOn = false, rcPack = null, rcBase = '', rcTimer = 0, rcPose = '', rcLastAct = Date.now();
+  let rcWalkT = 0, rcWalkEndT = 0, rcWalking = false, rcKeyTimes = [], rcTypeCool = 0;
   const rcSleepAfter = Math.max(1, Number(qs.get('sleep') || 45)) * 60 * 1000;
 
   function rcPoseTo(key) {
@@ -456,7 +457,58 @@
     clearTimeout(rcTimer);
     if (ms) rcTimer = setTimeout(function () { rcBox.classList.remove('a-' + name); }, ms);
   }
-  function rcWake() {
+  function rcWalkFrames() {
+    return (rcPack && rcPack.frames && rcPack.frames.walk && rcPack.frames.walk.length) ? rcPack.frames.walk : null;
+  }
+  function rcWalkStop() {
+    if (!rcWalking) return;
+    rcWalking = false;
+    if (rcWalkT) { clearInterval(rcWalkT); rcWalkT = 0; }
+    if (rcWalkEndT) { clearTimeout(rcWalkEndT); rcWalkEndT = 0; }
+    rcBox.classList.remove('a-walking');
+    rcImg.style.transform = '';
+    if (rcOn && rcPack) rcPoseTo(rcPose || 'stand');
+  }
+  function rcWalkStart(dir, ms) {
+    if (!rcOn || !rcPack) return false;
+    const list = rcWalkFrames();
+    if (!list) return false;
+    rcBox.classList.remove('a-sleepy', 'a-bob', 'a-eat', 'a-lean');
+    rcWake();
+    const fps = Number(rcPack.fps || 10);
+    const ver = '?v=' + encodeURIComponent(rcPack.ver || '');
+    const srcs = list.map(function (f) { return rcBase + 'img/' + f + ver; });
+    if (!rcPack.__pre) { rcPack.__pre = 1; srcs.forEach(function (s) { const im = new Image(); im.src = s; }); }
+    if (rcWalkT) { clearInterval(rcWalkT); rcWalkT = 0; }
+    if (rcWalkEndT) { clearTimeout(rcWalkEndT); rcWalkEndT = 0; }
+    rcWalking = true;
+    rcBox.classList.add('a-walking');
+    rcImg.style.transform = 'scaleX(' + (Number(dir) < 0 ? -1 : 1) + ')';
+    let i = 0;
+    rcImg.src = srcs[0];
+    rcWalkT = setInterval(function () {
+      i = (i + 1) % srcs.length;
+      rcImg.src = srcs[i];
+    }, 1000 / fps);
+    rcWalkEndT = setTimeout(rcWalkStop, Math.max(600, Number(ms) || 2000));
+    return true;
+  }
+  // 鎵撳瓧鑱斿姩锛氫竴鍙ｆ皵杩炴暡鏃讹紝鐚姮澶寸湅涓€鐪煎睆骞曪紙鍋跺皵锛夛紝涓嶆墦鏂蛋鍔?鍚冮キ/鐫¤
+  function rcTypeHit(n) {
+    if (!rcOn) return;
+    const now = Date.now();
+    for (let k = 0; k < n; k++) rcKeyTimes.push(now);
+    while (rcKeyTimes.length && now - rcKeyTimes[0] > 1200) rcKeyTimes.shift();
+    if (rcWalking || rcBox.classList.contains('a-sleepy') || rcBox.classList.contains('a-eat') || rcBox.classList.contains('a-lean')) return;
+    if (rcKeyTimes.length >= 8 && now > rcTypeCool) {
+      rcTypeCool = now + 2500;
+      rcLastAct = now;
+      rcBox.classList.add('a-bob');
+      setTimeout(function () { rcBox.classList.remove('a-bob'); }, 620);
+      rcBlinkOnce();
+      if (Math.random() < 0.4) setTimeout(rcBlinkOnce, 420);
+    }
+  }  function rcWake() {
     rcLastAct = Date.now();
     rcLastPose = Date.now();
     setTimeout(rcBlinkOnce, 260);
@@ -493,7 +545,7 @@
   function rcHas(k) { return !!(rcPack && rcPack.layers && rcPack.layers[k]); }
   function rcBlinkOnce() {
     if (!rcOn || !rcPack || !rcPack.blink) return;
-    if (rcPose === 'lie' || rcBox.classList.contains('a-sleepy')) return;
+    if (rcWalking || rcPose === 'lie' || rcBox.classList.contains('a-sleepy')) return;
     const b = rcPack.blink[rcPose];
     if (!b) return;
     const cur = rcBase + 'img/' + b + '?v=' + encodeURIComponent(rcPack.ver || '');
@@ -508,7 +560,7 @@
   setInterval(function () {
     if (!rcOn) return;
     if (Number(qs.get('sleep')) > 999) return;
-    if (rcPose === 'lie' || rcBox.classList.contains('a-sleepy')) return;
+    if (rcWalking || rcPose === 'lie' || rcBox.classList.contains('a-sleepy')) return;
     if (Date.now() - rcLastAct > rcSleepAfter) { rcPoseTo('lie'); rcBox.classList.add('a-sleepy'); return; }
     if (rcBox.classList.contains('a-eat') || rcBox.classList.contains('a-lean') || rcBox.classList.contains('a-walk')) return;
     if (Math.random() < 0.72) { rcBlinkOnce(); if (Math.random() < 0.45) setTimeout(rcBlinkOnce, 420); }
@@ -567,7 +619,7 @@
     link: linkOpen,
     palette: paletteOpen,
     paletteOff: paletteClose,
-    model: rcModel,
+    model: rcModel, walk: rcWalkStart, walkStop: rcWalkStop,
     modelSleep: function () { rcPoseTo('lie'); rcBox.classList.add('a-sleepy'); },
     modelOff: rcOff
   };
@@ -828,6 +880,7 @@
       if (o.kind === 'press' && o.list) {
         window.__kn = (window.__kn || 0) + o.list.length;
         window.__lastKeys = o.list.slice();
+        try { rcTypeHit(o.list.length); } catch (e2) {}
         const nowT = Date.now();
         if (nowT - lastAct > REST.gapMinutes * 60000) { busySince = nowT; nextWarnAt = nowT + REST.restMinutes * 60000; }
         lastAct = nowT;
