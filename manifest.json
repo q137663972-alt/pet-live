@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.27.5",
+  "version": "2026.11.27.6",
   "updated": "2026-11-27",
   "looks": [
     "looks/orange.json",
@@ -19,10 +19,10 @@
   "models": [
     {
       "id": "real-ragdoll",
-      "name": "真猫·布偶（胖版·会走）",
-      "ver": "1.3.0",
-      "file": "models/real-ragdoll-1.3.0.zip",
-      "size": 3113147,
+      "name": "真猫·布偶（胖版·16帧走）",
+      "ver": "1.4.0",
+      "file": "models/real-ragdoll-1.4.0.zip",
+      "size": 4080313,
       "kind": "photo"
     }
   ],
