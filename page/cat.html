@@ -560,6 +560,7 @@
   function rcModel(id) {
     rcOff();
     if (!id) { post({ t: 'modelok', id: '' }); return; }
+    modelRequested = true;
     const base = 'https://packs.local/models/' + id + '/';
     return fetch(base + 'pack.json', { cache: 'no-store' }).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -639,6 +640,8 @@
 
   /* ---------- 3D 骨骼猫（kind=glb，按 CATGLB_SPEC 契约：idle/walk/run/sit/sleep/eat） ---------- */
   let R3 = null, rcPack3 = null, rcBase3 = '';
+  /* 宿主是否已下发过模型；未下发时页面自行兜底加载 real-ragdoll（老壳无 host 自更新路径） */
+  let modelRequested = false;
 
   /* 契约剪辑名 → 状态；缺剪辑一律回退 idle，不报错卡死 */
   const RC3_STATE_ANIM = { idle: 'idle', walk: 'walk', sit: 'sit', sleep: 'sleep', eat: 'eat' };
@@ -665,7 +668,7 @@
       walkActive: false, walkEnd: 0, walkWatch: 0, walkDur: 1500,
       turnFrom: 0, turnTo: 0, turnT: 1, turnDur: 0.25,
       blinkTimer: 0, blinkNext: 0, blinkPhase: 0, blinkCloseUntil: 0,
-      bones: {}, eyes: [], H: 0.62, scaleK: 1,
+      bones: {}, eyes: [], lids: [], H: 0.62, scaleK: 1,
       mixTimer: 0, coatTint: null
     };
     return R3;
@@ -691,8 +694,8 @@
     const h = R.cv.clientHeight || window.innerHeight;
     R.r.setSize(w, h, false);
     R.cam.aspect = w / Math.max(1, h); R.cam.updateProjectionMatrix();
-    /* 构图：目标猫屏高 112px（105~120px 区间中值），由视口高度与 fov 反推距离；高度始终取自 pack.json */
-    const targetPx = 112;
+    /* 构图：目标猫屏高 98px（老壳 270×245 不加宽，四周留 ≥4px 余量），由视口高度与 fov 反推距离；高度始终取自 pack.json */
+    const targetPx = 98;
     const dist = (h * H) / (2 * targetPx * Math.tan(R.cam.fov * Math.PI / 360));
     R.cam.position.set(0, H * 0.56, dist);
     R.cam.lookAt(0, H * 0.46, 0);
@@ -763,8 +766,11 @@
           R.bones = {};
           root.traverse(function (o) { if (o.isBone) R.bones[o.name] = o; });
           R.eyes = [R.bones['EyeL'], R.bones['EyeR']].filter(Boolean);
+          R.lids = [R.bones['EyelidL'], R.bones['EyelidR']].filter(Boolean);
+          /* 眼睑子节点：静止态初始化为 0.01 隐藏；闭眼时 scale→1 覆盖眼球（2.5.0 起） */
+          R.lids.forEach(function (b) { b.scale.set(0.01, 0.01, 0.01); });
           if (!R.bones['Head']) throw new Error('骨骼不符：缺 Head');
-          post({ t: 'dbg', m: '3d bones eyes=[' + R.eyes.map(function (b) { return b.name; }).join(',') + '] n=' + R.eyes.length + ' head=' + (R.bones['Head'] ? 'yes' : 'no') });
+          post({ t: 'dbg', m: '3d bones eyes=[' + R.eyes.map(function (b) { return b.name; }).join(',') + '] lids=[' + R.lids.map(function (b) { return b.name; }).join(',') + '] n=' + R.eyes.length + ' head=' + (R.bones['Head'] ? 'yes' : 'no') });
 
           R.shadow = rc3Shadow(H);
           pivot.add(R.shadow);
@@ -787,11 +793,21 @@
     const clipName = (RC3_STATE_ANIM[name] && R.acts[RC3_STATE_ANIM[name]]) ? RC3_STATE_ANIM[name]
       : (R.acts[name] ? name : null);
     if (!clipName) return false;
-    if (R.curAct && R.cur === clipName && R.curAct.isRunning()) return true;
-    if (R.curAct) R.curAct.fadeOut(0.22);
     const a = R.acts[clipName];
-    a.reset(); a.setEffectiveTimeScale(1); a.setEffectiveWeight(1); a.fadeIn(0.22); a.play();
+    if (!a) return false;
+    /* 硬切但确定性：上一个动作立即停掉并清零权重，当前动作 100% 权重播放。
+       不再用 fadeIn/fadeOut（旧实现会出现所有动作 weight=0、动作 stopped，猫永远停在绑定姿势） */
+    if (R.curAct && R.curAct !== a) { try { R.curAct.setEffectiveWeight(0); R.curAct.stop(); } catch (e) {} }
+    a.stop();
+    a.reset();
+    a.enabled = true;
+    a.paused = false;
+    a.setLoop(THREE.LoopRepeat, Infinity);
+    a.setEffectiveTimeScale(1);
+    a.setEffectiveWeight(1);
+    a.play();
     R.cur = clipName; R.curAct = a;
+    R.poseDeadFrames = 0;
     return true;
   }
 
@@ -819,6 +835,14 @@
     const dt = Math.min(0.1, (t - R.last) / 1000);
     R.last = t;
     if (R.mixer) R.mixer.update(dt);
+    /* 姿态看门狗：任何情况下当前动作都必须 running 且权重≈1，否则重播（防外部 stop/权重被清零导致定格） */
+    if (R.mixer && R.curAct && (!R.curAct.isRunning() || R.curAct.getEffectiveWeight() < 0.5)) {
+      try {
+        R.curAct.reset(); R.curAct.enabled = true; R.curAct.paused = false;
+        R.curAct.setLoop(THREE.LoopRepeat, Infinity);
+        R.curAct.setEffectiveTimeScale(1); R.curAct.setEffectiveWeight(1); R.curAct.play();
+      } catch (e) {}
+    }
 
     /* 朝向：站立回正 0°，走路侧身 ±90°；确定性 0.25s smoothstep 缓动，施加在加入 scene 的 pivot 上（不碰被 mixer 驱动的骨） */
     if (R.root) {
@@ -853,30 +877,37 @@
     R.r.render(R.scene, R.cam);
   }
 
-  /* 眨眼调度：随机 3~7s 一次，偶发连眨两下；闭眼保持 ~180ms，scale.y 下限 0.08（不压成 0） */
+  /* 眨眼：优先眼睑骨 EyelidL/R（scale 0.01 隐藏 ↔ 1 覆盖眼球）；无眼睑骨时退回 Eye 骨 scale.y 兜底。不打断状态机 */
   function rc3BlinkSchedule() {
     const R = R3; if (!R) return;
     R.blinkNext = performance.now() + 3000 + Math.random() * 4000;
   }
   function rc3BlinkOnce(ms) {
     const R = R3; if (!R || !R.on) return;
-    if (!R.eyes.length) return;
-    R.blinkCloseUntil = performance.now() + (Number(ms) || 180);
+    if (!R.lids.length && !R.eyes.length) return;
+    /* 闭眼保持 ≥120ms，避免一闭即睁 */
+    const hold = Math.max(120, Number(ms) || 180);
+    R.blinkCloseUntil = performance.now() + hold;
     R.blinkPhase = 1;
   }
   function rc3BlinkTick(t) {
     const R = R3; if (!R) return;
-    if (!R.eyes.length) return;
+    if (!R.lids.length && !R.eyes.length) return;
     if (R.blinkPhase === 0 && t >= R.blinkNext) {
       R.blinkPhase = 1;
       R.blinkCloseUntil = t + 180;
       if (Math.random() < 0.3) setTimeout(function () { rc3BlinkOnce(180); }, 420);
     }
     if (R.blinkPhase === 1) {
-      R.eyes.forEach(function (b) { b.scale.y = 0.08; });
+      if (R.lids.length) {
+        R.lids.forEach(function (b) { b.scale.set(1, 1, 1); });
+      } else {
+        R.eyes.forEach(function (b) { b.scale.y = 0.08; });
+      }
       if (t >= R.blinkCloseUntil) {
         R.blinkPhase = 0;
-        R.eyes.forEach(function (b) { b.scale.y = 1; });
+        if (R.lids.length) { R.lids.forEach(function (b) { b.scale.set(0.01, 0.01, 0.01); }); }
+        else { R.eyes.forEach(function (b) { b.scale.y = 1; }); }
         rc3BlinkSchedule();
       }
     }
@@ -918,6 +949,7 @@
     if (R.on) rc3SetState('idle');
   }
 
+  window.__setState = function (n) { if (!R3 || !R3.on) return false; rc3SetState(String(n || 'idle')); return true; };
   window.pet = {
     setCoat(c) {
       window.__selfCoat = c;
@@ -1004,11 +1036,11 @@
     modelOff: rcOff
   };
 
-  /* 调试入口：强制闭眼 N 毫秒（验收截帧用）；常态眨眼仍走随机 3~7s */
-  window.__blinkHold = function (ms) { rc3BlinkOnce(Number(ms) || 180); };
+  /* 调试入口：强制闭眼 N 毫秒（验收截帧用，≥120ms）；常态眨眼仍走随机 3~7s */
+  window.__blinkHold = function (ms) { rc3BlinkOnce(Number(ms) || 180); return true; };
   window.__blinkInfo = function () {
     if (!R3) return { on: false };
-    return { on: R3.on, state: R3.state, cur: R3.cur, acts: Object.keys(R3.acts), eyes: R3.eyes.map(function (b) { return b.name; }), walkActive: R3.walkActive, rot: R3.root ? R3.root.rotation.y : null };
+    return { on: R3.on, state: R3.state, cur: R3.cur, acts: Object.keys(R3.acts), eyes: R3.eyes.map(function (b) { return b.name; }), lids: R3.lids.map(function (b) { return b.name; }), walkActive: R3.walkActive, rot: R3.root ? R3.root.rotation.y : null };
   };
 
   /* ---------- page -> host（拖动与右键交给宿主处理，页面只在点按猫头时摸一下） ---------- */
@@ -1344,6 +1376,14 @@ window.pet.ask = function (kind, fromName, extra) { askShow(kind === 'breed' ? '
   setInterval(sendRegions, 4000);
 
   document.addEventListener('pointerdown', function () { post({ t: 'hit' }); }, true);
+
+  /* 无宿主兜底：700ms 内 host 未下发模型，则按 ?model= 或缺省 real-ragdoll 自行加载；不落到 2D 旧猫/空白 */
+  setTimeout(function () {
+    if (modelRequested) return;
+    const def = qs.get('model') || 'real-ragdoll';
+    try { rcModel(def); } catch (e) { post({ t: 'err', m: '默认模型加载异常：' + (e && e.message ? e.message : e) }); }
+  }, 700);
+
   post({ t: 'ready', coats: api && api.coats || [] });
 })();
 </script>
