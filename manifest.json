@@ -26,5 +26,9 @@
       "kind": "photo"
     }
   ],
-  "page": "page/cat.html"
+  "page": "page/cat.html",
+  "host": {
+    "ver": "2026.11.27.8",
+    "file": "host/pet3d.ps1"
+  }
 }
