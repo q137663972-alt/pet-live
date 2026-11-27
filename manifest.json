@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.27.9",
+  "version": "2026.11.27.10",
   "updated": "2026-11-27",
   "looks": [
     "looks/orange.json",
@@ -36,7 +36,7 @@
   ],
   "page": "page/cat.html",
   "host": {
-    "ver": "2026.11.27.8",
+    "ver": "2026.11.27.10",
     "file": "host/pet3d.ps1"
   }
 }

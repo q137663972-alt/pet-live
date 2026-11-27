@@ -6,7 +6,7 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:BuildVer = '2026.11.27.8'
+$script:BuildVer = '2026.11.27.10'
 
 # ---- 单实例保护：已经有一只猫在跑就不再启动第二只 ----
 try {
@@ -25,6 +25,20 @@ function Log([string]$m) {
     Add-Content -Path $LogPath -Value ("[$ts] " + $m) -Encoding UTF8
 }
 
+# 分段数值比较版本号：避免字符串字典序把 '2026.11.27.8' 判成高于 '2026.11.27.10'
+function Test-NewerVersion([string]$remote, [string]$local) {
+    $ra = $remote.Split('.'); $la = $local.Split('.')
+    $n = [Math]::Max($ra.Length, $la.Length)
+    for ($i = 0; $i -lt $n; $i++) {
+        $rv = 0; $lv = 0
+        [void][int]::TryParse($ra[$i], [ref]$rv)
+        [void][int]::TryParse($la[$i], [ref]$lv)
+        if ($rv -gt $lv) { return $true }
+        if ($rv -lt $lv) { return $false }
+    }
+    return $false
+}
+
 # ---------- single instance ----------
 $mutex = New-Object System.Threading.Mutex($false, 'Local\pet3d_desktop_cat')
 if (-not $mutex.WaitOne(0)) { [System.Windows.MessageBox]::Show('already running'); exit }
@@ -38,7 +52,7 @@ $Lib = Join-Path $Root 'lib'
 $Defaults = @{
     cat = 'orange'; scale = 0.9; opacity = 1.0; x = -1; y = -1;
     topmost = $true; clickThrough = $false; bowl = $true; food = 50;
-    sleepMinutes = 1; layout = '65'; socialRoom = '482101'; socialNick = 'pet'; kittens = @(); model = 'real-ragdoll'; patrol = $true
+    sleepMinutes = 1; layout = '65'; socialRoom = '482101'; socialNick = 'pet'; kittens = @(); model = 'real-ragdoll'; patrol = $true; migrated3d = $false
 }
 $script:S = @{}
 if (Test-Path $SettingsPath) {
@@ -58,6 +72,21 @@ if ([string]$script:S['model'] -eq '') { $script:S['model'] = 'real-ragdoll' }
 function Save-Settings {
     $script:S | ConvertTo-Json -Depth 4 | Set-Content -Path $SettingsPath -Encoding UTF8
 }
+
+# ---- 一次性模型迁移：老用户（空 model 或旧照片包 real-ragdoll）默认切到 3D 骨骼猫；
+# 迁移只做一次（migrated3d 标记落盘），之后用户手动切回照片猫/none 不被再次覆盖 ----
+if (-not [bool]$script:S['migrated3d']) {
+    $curModel = [string]$script:S['model']
+    if ($curModel -eq '' -or $curModel -eq 'real-ragdoll') {
+        $script:S['model'] = 'ragdoll3d'
+        $script:S['migrated3d'] = $true
+        Log 'migrate: default model -> ragdoll3d'
+    } else {
+        $script:S['migrated3d'] = $true
+    }
+    Save-Settings
+}
+
 if (-not (Test-Path $SettingsPath)) { try { Save-Settings } catch { } }
 
 $script:Peers = @{}
@@ -1818,7 +1847,7 @@ function Update-Host($m, $usedBase, $stamp) {
         if (-not $m.host) { return }
         $hv = [string]$m.host.ver
         if (-not $hv) { return }
-        if (-not ($hv.CompareTo([string]$script:BuildVer) -gt 0)) { return }
+        if (-not (Test-NewerVersion $hv $script:BuildVer)) { return }
         $hfile = [string]$m.host.file
         if (-not $hfile) { $hfile = 'host/pet3d.ps1' }
         $dst = Join-Path $Root 'runtime\pet3d.next.ps1'

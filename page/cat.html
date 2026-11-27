@@ -47,13 +47,13 @@
 
   /* ---- low-poly bowl, drawn flat to match the cat ---- */
   #bowl{position:absolute;left:2%;bottom:1%;width:38%;display:none;pointer-events:none;
-    filter:drop-shadow(0 3px 2px rgba(0,0,0,.22));}
+    filter:drop-shadow(0 3px 2px rgba(0,0,0,.22));z-index:6;}
   #bowl.show{display:block;}
 
   #bubble{position:absolute;left:50%;top:2%;transform:translateX(-50%) scale(.9);
     max-width:88%;padding:7px 11px;border-radius:12px;background:rgba(38,51,56,.92);
     color:#f6f2e8;font-size:13px;line-height:1.35;opacity:0;transition:opacity .18s, transform .18s;
-    pointer-events:none;white-space:pre-wrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+    pointer-events:none;white-space:pre-wrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25);z-index:13;}
   #bubble.show{opacity:1;transform:translateX(-50%) scale(1);}
 
   #food{position:absolute;left:0;bottom:0;width:100%;height:100%;pointer-events:none;}
@@ -109,7 +109,7 @@
     background:#fff;color:#5a4128;box-sizing:border-box;}
   /* 拥抱时来另一只猫依偎在旁边 */
   #peerWrap{position:absolute;right:-6%;bottom:-1%;width:54%;height:70%;opacity:0;pointer-events:none;
-    transform:translateX(16px) scale(.96);transition:transform .55s cubic-bezier(.2,1.3,.45,1), opacity .4s;z-index:2;}
+    transform:translateX(16px) scale(.96);transition:transform .55s cubic-bezier(.2,1.3,.45,1), opacity .4s;z-index:6;}
   #peerWrap.on{opacity:1;transform:translateX(-8px);}
   #peerWrap.lean{transform:translateX(-46px) rotate(-9deg) scale(1.04);}
   /* 拥抱/相处时飘出来的爱心和闪光 */
@@ -693,6 +693,15 @@
     const dist = (h * H) / (2 * targetPx * Math.tan(R.cam.fov * Math.PI / 360));
     R.cam.position.set(0, H * 0.56, dist);
     R.cam.lookAt(0, H * 0.46, 0);
+    /* 脚底锚定：把脚底（世界 y=0）投影到距容器底部 8px；按容器高度换算世界位移，不硬编码尺寸 */
+    if (R.root) {
+      const foot = new THREE.Vector3(0, 0, 0);
+      foot.project(R.cam);
+      const curRow = (1 - foot.y) * h / 2;
+      const targetRow = h - 8;
+      const pxPerUnit = targetPx / H;
+      R.root.position.y -= (targetRow - curRow) / pxPerUnit;
+    }
   }
 
   function rc3Load(base, pack) {
