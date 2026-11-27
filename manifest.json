@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "version": "2026.11.25.4",
-  "updated": "2026-11-25",
+  "version": "2026.11.27.1",
+  "updated": "2026-11-27",
   "looks": [
     "looks/orange.json",
     "looks/tabby.json",
@@ -15,5 +15,15 @@
   "feats": "feats/ops.json",
   "cattery": "cattery/",
   "rest": "feats/rest.json",
-  "cats": "feats/cats.json"
+  "cats": "feats/cats.json",
+  "models": [
+    {
+      "id": "real-ragdoll",
+      "name": "真猫·布偶（胖版）",
+      "ver": "1.1.0",
+      "file": "models/real-ragdoll-1.1.0.zip",
+      "size": 691784,
+      "kind": "photo"
+    }
+  ]
 }
