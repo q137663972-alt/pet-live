@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.27.6",
+  "version": "2026.11.27.9",
   "updated": "2026-11-27",
   "looks": [
     "looks/orange.json",
@@ -17,6 +17,14 @@
   "rest": "feats/rest.json",
   "cats": "feats/cats.json",
   "models": [
+    {
+      "id": "ragdoll3d",
+      "name": "布偶·3D骨骼猫",
+      "ver": "2.0.0",
+      "file": "models/ragdoll3d-2.0.0.zip",
+      "size": 277118,
+      "kind": "glb"
+    },
     {
       "id": "real-ragdoll",
       "name": "真猫·布偶（胖版·16帧走）",

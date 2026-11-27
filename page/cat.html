@@ -122,13 +122,18 @@
     100%{opacity:0;transform:translate(var(--dx,0px),-52px) scale(1.2);}
   }
   #peerHost{width:100%;height:100%;}#peerBubble{position:absolute;left:50%;top:-6%;transform:translateX(-50%) scale(.9);max-width:96%;padding:6px 10px;border-radius:11px;background:rgba(38,51,56,.92);color:#f6f2e8;font-size:12px;line-height:1.3;opacity:0;transition:opacity .18s,transform .18s;white-space:pre-wrap;text-align:center;z-index:6;}#peerBubble.show{opacity:1;transform:translateX(-50%) scale(1);}
+
+  #c3d{position:fixed;left:0;top:0;width:100%;height:100%;display:none;pointer-events:none;z-index:5;}
+  #c3d canvas{width:100%;height:100%;display:block;}
 </style>
 <script src="three.min.js"></script>
+  <script src="GLTFLoader.js"></script>
 <script src="7paws.js"></script>
 </head>
 <body>
 <div id="stage"></div>
 <div id="realcat"><img id="rcImg" alt="" /><img id="rcImgB" alt="" /><div id="rcZ">Z z</div></div>
+  <div id="c3d"><canvas id="c3dCv"></canvas></div>
 <div id="peerWrap"><div id="peerHost"></div><div id="peerBubble"></div></div>
 <div id="ask">
   <div id="askText"></div>
@@ -479,6 +484,7 @@
     return (rcPack && rcPack.frames && rcPack.frames.walk && rcPack.frames.walk.length) ? rcPack.frames.walk : null;
   }
   function rcWalkStop() {
+    if (R3 && R3.on) { rc3WalkStop(); return; }
     if (!rcWalking) return;
     rcWalking = false;
     if (rcWalkT) { clearInterval(rcWalkT); rcWalkT = 0; }
@@ -488,6 +494,7 @@
     if (rcOn && rcPack) rcPoseTo(rcPose || 'stand');
   }
   function rcWalkStart(dir, ms) {
+    if (R3 && R3.on) return rc3Walk(dir, ms);
     if (!rcOn || !rcPack) return false;
     const list = rcWalkFrames();
     if (!list) return false;
@@ -513,6 +520,7 @@
   }
   // 鎵撳瓧鑱斿姩锛氫竴鍙ｆ皵杩炴暡鏃讹紝鐚姮澶寸湅涓€鐪煎睆骞曪紙鍋跺皵锛夛紝涓嶆墦鏂蛋鍔?鍚冮キ/鐫¤
   function rcTypeHit(n) {
+    if (R3 && R3.on) { rc3BlinkOnce(); return; }
     if (!rcOn) return;
     const now = Date.now();
     for (let k = 0; k < n; k++) rcKeyTimes.push(now);
@@ -529,11 +537,20 @@
   }  function rcWake() {
     rcLastAct = Date.now();
     rcLastPose = Date.now();
+    if (R3 && R3.on) { rc3BlinkOnce(); rc3SetState('idle'); return; }
     setTimeout(rcBlinkOnce, 260);
     rcBox.classList.remove('a-sleepy');
     if (rcPose === 'lie') rcPoseTo(rcPack && rcPack.pose ? rcPack.pose : 'stand');
   }
   function rcOff() {
+    if (R3) {
+      R3.on = false; R3.ro = false;
+      R3.state = ''; R3.walkActive = false;
+      const c = document.getElementById('c3d'); if (c) c.style.display = 'none';
+      if (R3.mixer) try { R3.mixer.stopAllAction(); } catch (e) {}
+      if (R3.mixTimer) { clearTimeout(R3.mixTimer); R3.mixTimer = 0; }
+      if (R3.blinkTimer) { clearTimeout(R3.blinkTimer); R3.blinkTimer = 0; }
+    }
     rcOn = false; rcPack = null; rcPose = '';
     rcBox.classList.remove('on', 'a-bob', 'a-walk', 'a-eat', 'a-lean', 'a-sleepy');
     Array.prototype.forEach.call(document.querySelectorAll('#stage canvas'), function (c) { c.style.display = ''; });
@@ -546,6 +563,25 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (pack) {
+      if (String(pack.kind) === 'glb') {
+        rcPack3 = pack; rcBase3 = base;
+        rcOff();
+        return rc3Load(base, pack).then(function () {
+          const R = rc3Init();
+          R.on = true; R.ro = true;
+          document.getElementById('c3d').style.display = 'block';
+          /* 3D 模式下隐藏所有 2D 猫 DOM（照片猫 + 卡通猫 canvas），避免重影 */
+          rcBox.classList.remove('on');
+          Array.prototype.forEach.call(document.querySelectorAll('#stage canvas'), function (cv) { cv.style.display = 'none'; });
+          rc3SetState('idle');
+          rc3BlinkSchedule();
+          rc3Tick();
+          post({ t: 'modelok', id: id });
+        }).catch(function (e) {
+          rc3Fail('GLB 加载失败：' + (e && e.message ? e.message : e));
+          throw e;
+        });
+      }
       if (String(pack.kind) !== 'photo') throw new Error('不是照片模型包');
       rcPack = pack; rcBase = base;
       rcImg.dataset.src = '';
@@ -558,6 +594,11 @@
       rcOff();
       post({ t: 'err', m: '模型加载失败：' + (e && e.message ? e.message : e) });
     });
+  }
+  /* 3D 加载失败兜底：隐藏 canvas、恢复 2D 卡通猫，绝不白窗 */
+  function rc3Fail(reason) {
+    try { post({ t: 'err', m: '3D 模型回退：' + reason }); } catch (e) {}
+    rcOff();
   }
   let rcBlinkT = 0, rcLastPose = Date.now();
   function rcHas(k) { return !!(rcPack && rcPack.layers && rcPack.layers[k]); }
@@ -576,6 +617,11 @@
   }
   // 生命感：眨眼睛 + 偶尔换个姿势（站<->坐），不打扰吃饭/拥抱/睡觉
   setInterval(function () {
+    if (R3 && R3.on) {
+      if (Number(qs.get('sleep')) > 999) return;
+      if (Date.now() - rcLastAct > rcSleepAfter) { rc3SetState('sleep'); }
+      return;
+    }
     if (!rcOn) return;
     if (Number(qs.get('sleep')) > 999) return;
     if (rcWalking || rcPose === 'lie' || rcBox.classList.contains('a-sleepy')) return;
@@ -588,9 +634,270 @@
     }
   }, 5000);
 
+
+  /* ---------- 3D 骨骼猫（kind=glb，按 CATGLB_SPEC 契约：idle/walk/run/sit/sleep/eat） ---------- */
+  let R3 = null, rcPack3 = null, rcBase3 = '';
+
+  /* 契约剪辑名 → 状态；缺剪辑一律回退 idle，不报错卡死 */
+  const RC3_STATE_ANIM = { idle: 'idle', walk: 'walk', sit: 'sit', sleep: 'sleep', eat: 'eat' };
+
+  function rc3Init() {
+    if (R3) return R3;
+    const cv = document.getElementById('c3dCv');
+    const r = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true, premultipliedAlpha: false });
+    r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    r.setClearColor(0x000000, 0); /* 透明清屏，整窗不能不透明 */
+    if ('outputEncoding' in r && THREE.sRGBEncoding) r.outputEncoding = THREE.sRGBEncoding;
+    const scene = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(23, 1, 0.05, 500);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb5a68f, 1.05));
+    const key = new THREE.DirectionalLight(0xfff2df, 1.15); key.position.set(-3, 6, 4); scene.add(key);
+    const fill = new THREE.DirectionalLight(0xcddfff, 0.5); fill.position.set(4, 3, -3); scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+    R3 = {
+      cv: cv, r: r, scene: scene, cam: cam,
+      mixer: null, acts: {}, state: '', curAct: null,
+      root: null, mesh: null, shadow: null,
+      on: false, dir: 1, last: 0,
+      lookX: 0, lookY: 0, headCurX: 0, headCurY: 0,
+      walkActive: false, walkEnd: 0, walkTimer: 0,
+      blinkTimer: 0, blinkNext: 0, blinkPhase: 0, blinkHold: 0,
+      bones: {}, eyes: [], H: 0.62, scaleK: 1,
+      mixTimer: 0, coatTint: null
+    };
+    return R3;
+  }
+
+  function rc3Shadow(h) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const rad = g.createRadialGradient(64, 64, 3, 64, 64, 62);
+    rad.addColorStop(0, 'rgba(0,0,0,0.38)'); rad.addColorStop(0.55, 'rgba(0,0,0,0.14)'); rad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rad; g.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.scale.set(1.35 * h, 0.95 * h, 1);
+    return m;
+  }
+
+  function rc3Frame(H) {
+    const R = R3; if (!R) return;
+    const w = R.cv.clientWidth || window.innerWidth;
+    const h = R.cv.clientHeight || window.innerHeight;
+    R.r.setSize(w, h, false);
+    R.cam.aspect = w / Math.max(1, h); R.cam.updateProjectionMatrix();
+    /* 构图：目标猫屏高 112px（105~120px 区间中值），由视口高度与 fov 反推距离；高度始终取自 pack.json */
+    const targetPx = 112;
+    const dist = (h * H) / (2 * targetPx * Math.tan(R.cam.fov * Math.PI / 360));
+    R.cam.position.set(0, H * 0.56, dist);
+    R.cam.lookAt(0, H * 0.46, 0);
+  }
+
+  function rc3Load(base, pack) {
+    let R;
+    try {
+      R = rc3Init();
+    } catch (initErr) {
+      return Promise.reject(initErr);
+    }
+    const url = base + (pack.model || 'cat.glb') + '?v=' + encodeURIComponent(pack.ver || '');
+    return new Promise(function (res, rej) {
+      new THREE.GLTFLoader().load(url, function (gl) {
+        try {
+          const root = gl.scene;
+          let meshCount = 0;
+          root.traverse(function (o) {
+            if (o.isMesh) {
+              meshCount++;
+              o.frustumCulled = false;
+              if (o.material) {
+                const mats = Array.isArray(o.material) ? o.material : [o.material];
+                mats.forEach(function (mt) {
+                  mt.metalness = 0.0;
+                  mt.roughness = 0.85;
+                  mt.flatShading = false;
+                  if (o.geometry && o.geometry.attributes.color) mt.vertexColors = true;
+                  mt.needsUpdate = true;
+                });
+              }
+            }
+          });
+          if (meshCount === 0) throw new Error('GLB 内没有网格');
+
+          let box = new THREE.Box3().setFromObject(root);
+          const size = box.getSize(new THREE.Vector3());
+          const H = Number(pack.height) || 0.62;
+          R.scaleK = H / (size.y || 1);
+          root.scale.setScalar(R.scaleK);
+          box = new THREE.Box3().setFromObject(root);
+          const ctr = box.getCenter(new THREE.Vector3());
+          root.position.set(-ctr.x, -box.min.y, -ctr.z);
+
+          if (R.root) R.scene.remove(R.root);
+          const pivot = new THREE.Group();
+          pivot.add(root);
+          R.scene.add(pivot);
+          R.root = pivot;
+          R.mesh = root;
+
+          R.mixer = new THREE.AnimationMixer(root);
+          R.acts = {};
+          (gl.animations || []).forEach(function (cl) {
+            const short = String(cl.name).split('|').pop();
+            R.acts[short] = R.mixer.clipAction(cl);
+          });
+          R.bones = {};
+          root.traverse(function (o) { if (o.isBone) R.bones[o.name] = o; });
+          R.eyes = [R.bones['EyeL'], R.bones['EyeR']].filter(Boolean);
+          if (!R.bones['Head']) throw new Error('骨骼不符：缺 Head');
+
+          R.shadow = rc3Shadow(H);
+          pivot.add(R.shadow);
+          R.shadow.position.y = 0.001;
+          R.H = H;
+          rc3Frame(H);
+          res(true);
+        } catch (e) {
+          rej(e);
+        }
+      }, undefined, function (e) {
+        rej(e || new Error('GLB 下载/解析失败'));
+      });
+    });
+  }
+
+  /* 播放剪辑：缺剪辑回退 idle；交叉淡入 0.22s */
+  function rc3Play(name) {
+    const R = R3; if (!R) return false;
+    const clipName = (RC3_STATE_ANIM[name] && R.acts[RC3_STATE_ANIM[name]]) ? RC3_STATE_ANIM[name]
+      : (R.acts[name] ? name : null);
+    if (!clipName) return false;
+    if (R.curAct && R.cur === clipName && R.curAct.isRunning()) return true;
+    if (R.curAct) R.curAct.fadeOut(0.22);
+    const a = R.acts[clipName];
+    a.reset(); a.setEffectiveTimeScale(1); a.setEffectiveWeight(1); a.fadeIn(0.22); a.play();
+    R.cur = clipName; R.curAct = a;
+    return true;
+  }
+
+  /* 状态机：idle/walk/sit/sleep/eat；sleep 闭眼由剪辑内置，眨眼不打断状态 */
+  function rc3SetState(name) {
+    const R = R3; if (!R || !R.on) return;
+    if (R.state === name) return;
+    R.state = name;
+    rc3Play(name);
+  }
+
+  function rc3Tick() {
+    const R = R3; if (!R || !R.on) return;
+    requestAnimationFrame(rc3Tick);
+    const t = performance.now();
+    if (!R.last) R.last = t;
+    const dt = Math.min(0.1, (t - R.last) / 1000);
+    R.last = t;
+    if (R.mixer) R.mixer.update(dt);
+
+    /* 朝向：站立回正 0°，走路侧身 ±90°，0.25s 插值转身，不硬翻 */
+    if (R.root) {
+      const target = R.walkActive ? (R.dir < 0 ? Math.PI / 2 : -Math.PI / 2) : 0;
+      const k = Math.min(1, dt / 0.25);
+      R.root.rotation.y += (target - R.root.rotation.y) * k;
+    }
+
+    /* 头部跟随鼠标：Head 本地 Y ±0.5、X ±0.15，lerp 平滑（约 700ms 跟上） */
+    const head = R.bones['Head'];
+    if (head) {
+      const k = Math.min(1, dt / 0.7);
+      R.headCurY += (R.lookX * 0.5 - R.headCurY) * k;
+      R.headCurX += (R.lookY * 0.15 - R.headCurX) * k;
+      head.rotation.y = R.headCurY;
+      head.rotation.x = R.headCurX;
+      /* 耳骨轻微抖动 */
+      const jitter = Math.sin(t / 90) * 0.02;
+      const earL = R.bones['EarL'], earR = R.bones['EarR'];
+      if (earL) earL.rotation.z = jitter;
+      if (earR) earR.rotation.z = -jitter;
+    }
+
+    /* 眨眼：EyeL/EyeR scale.y 1 → 0.12 → 1；不打断状态机 */
+    rc3BlinkTick(t);
+
+    R.r.render(R.scene, R.cam);
+  }
+
+  /* 眨眼调度：随机 3~7s 一次，偶发连眨两下 */
+  function rc3BlinkSchedule() {
+    const R = R3; if (!R) return;
+    R.blinkNext = performance.now() + 3000 + Math.random() * 4000;
+  }
+  function rc3BlinkOnce() {
+    const R = R3; if (!R || !R.on) return;
+    if (!R.eyes.length) return;
+    R.blinkPhase = 1; R.blinkHold = 0;
+  }
+  function rc3BlinkTick(t) {
+    const R = R3; if (!R) return;
+    if (!R.eyes.length) return;
+    if (R.blinkPhase === 0 && t >= R.blinkNext) {
+      R.blinkPhase = 1; R.blinkHold = 0;
+      if (Math.random() < 0.3) setTimeout(rc3BlinkOnce, 420);
+    }
+    if (R.blinkPhase === 1) {
+      R.blinkHold += 1;
+      const s = 0.12;
+      R.eyes.forEach(function (b) { b.scale.y = s; });
+      if (R.blinkHold > 3) { R.blinkPhase = 2; }
+    } else if (R.blinkPhase === 2) {
+      R.eyes.forEach(function (b) { b.scale.y = 1; });
+      R.blinkPhase = 0;
+      rc3BlinkSchedule();
+    }
+  }
+
+  /* 走路：Root Y 旋转 ±90° 侧身，0.25s 插值转身；walk 剪辑 timeScale 跟随外壳步速 */
+  function rc3Walk(dir, ms) {
+    const R = R3; if (!R || !R.on) return false;
+    R.dir = Number(dir) < 0 ? -1 : 1;
+    R.walkActive = true;
+    rc3SetState('walk');
+    /* 步速匹配：外壳 2.6px/帧 @30fps ≈ 78px/s；按剪辑循环步幅估算 timeScale，避免打滑 */
+    if (R.curAct) {
+      try {
+        const dur = R.curAct.getClip().duration || 0.9;
+        const pace = Math.max(0.6, Math.min(1.6, dur / 0.9));
+        R.curAct.setEffectiveTimeScale(pace);
+      } catch (e) {}
+    }
+    clearTimeout(R.walkEnd);
+    if (ms) R.walkEnd = setTimeout(function () { rc3WalkStop(); }, Math.max(600, Number(ms)));
+    return true;
+  }
+  function rc3WalkStop() {
+    const R = R3; if (!R) return;
+    R.walkActive = false;
+    clearTimeout(R.walkEnd); R.walkEnd = 0;
+    if (R.on) rc3SetState('idle');
+  }
+
   window.pet = {
     setCoat(c) {
       window.__selfCoat = c;
+      /* 3D 模式：保留布偶配色，仅在材质上做轻微色偏；配色入口仍保留可用 */
+      if (R3 && R3.on) {
+        try {
+          if (c && c.fur && R3.mesh) {
+            R3.mesh.traverse(function (o) {
+              if (o.isMesh && o.material) {
+                const mats = Array.isArray(o.material) ? o.material : [o.material];
+                mats.forEach(function (mt) { if (mt.color) mt.color.set(c.fur).lerp(new THREE.Color(0xffffff), 0.55); });
+              }
+            });
+          }
+        } catch (e) {}
+        return;
+      }
       if (!api || !c) return;
       if (c.kind === 'builtin') {
         const cur = (qs.get('coat') || 'orange');
@@ -611,10 +918,17 @@
       const n = Math.max(0, Math.min(items.length, food == 0 ? 0 : Math.ceil(food / 25)));
       for (let i = 0; i < items.length; i++) items[i].style.opacity = i < n ? '1' : '0.12';
     },
-    tap(side) { rcWake(); if (rcOn) { rcAct('bob', 600); return; } if (api) api.tap(side === 'R' ? 'Right' : 'Left'); },
+    tap(side) { rcWake(); if (R3 && R3.on) { rc3BlinkOnce(); return; } if (rcOn) { rcAct('bob', 600); return; } if (api) api.tap(side === 'R' ? 'Right' : 'Left'); },
     idle(name, ms) { if (api && api.idleAction) api.idleAction(name, ms); },
     layout(id) { if (api && api.setLayout) api.setLayout(id); },
     feed() {
+      if (R3 && R3.on) {
+        rcWake();
+        rc3SetState('eat');
+        clearTimeout(feedTimer);
+        feedTimer = setTimeout(function () { rc3SetState('idle'); }, 3200);
+        return;
+      }
       if (rcOn) {
         rcWake();
         rcPoseTo('stand');
@@ -638,7 +952,15 @@
     palette: paletteOpen,
     paletteOff: paletteClose,
     model: rcModel, walk: rcWalkStart, walkStop: rcWalkStop,
-    modelSleep: function () { rcPoseTo('lie'); rcBox.classList.add('a-sleepy'); },
+    pointer(x, y) {
+      if (!R3 || !R3.on) return;
+      R3.lookX = Math.max(-1, Math.min(1, Number(x) || 0));
+      R3.lookY = Math.max(-1, Math.min(1, Number(y) || 0));
+    },
+    modelSleep: function () {
+      if (R3 && R3.on) { rc3SetState('sleep'); return; }
+      rcPoseTo('lie'); rcBox.classList.add('a-sleepy');
+    },
     modelOff: rcOff
   };
 
